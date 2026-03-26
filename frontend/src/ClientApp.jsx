@@ -278,14 +278,6 @@ function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="5.4" stroke="currentColor" strokeWidth="1.8" fill="none" /><path d="m15.2 15.2 3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function ShuffleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4.5 7.5h3.1c1.7 0 2.6.4 3.6 1.5l5.5 6c.5.5 1 .8 1.9.8h1.9M20 7v4h-4M4.5 16.5h3.1c1.2 0 1.8-.2 2.5-.9l1.5-1.5M20 13v4h-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  );
-}
-
 function QueueIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -397,18 +389,24 @@ export function ClientApp() {
   const tasteProfile = useMemo(() => buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }), [recentTracks, favorites, playlists, currentTrack]);
   const artistCards = useMemo(() => buildArtistCards(allKnownTracks, tasteProfile), [allKnownTracks, tasteProfile]);
   const rankedTracks = useMemo(() => buildTrackRanking(allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys), [allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys]);
-  const popularTracks = useMemo(
-    () => buildPopularTracks(uniqueTracks([...discoveryTracks, ...catalogTracks])).slice(0, 12),
-    [discoveryTracks, catalogTracks],
+  const rankedCatalogTracks = useMemo(
+    () => buildTrackRanking(catalogTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys),
+    [catalogTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys],
   );
-  const recommendedTracks = useMemo(
-    () => (tasteProfile.size > 0 ? rankedTracks.slice(0, 12) : popularTracks),
-    [tasteProfile, rankedTracks, popularTracks],
+  const popularTracks = useMemo(
+    () => buildPopularTracks(uniqueTracks([...discoveryTracks, ...catalogTracks])),
+    [discoveryTracks, catalogTracks],
   );
   const mixCards = useMemo(() => buildMixCards(playlists, rankedTracks), [playlists, rankedTracks]);
   const homeTracks = useMemo(
-    () => (searchResults.length > 0 ? searchResults : catalogTracks),
-    [searchResults, catalogTracks],
+    () => (
+      searchResults.length > 0
+        ? searchResults
+        : tasteProfile.size > 0
+          ? rankedCatalogTracks
+          : popularTracks
+    ),
+    [searchResults, tasteProfile, rankedCatalogTracks, popularTracks],
   );
   const folderCards = useMemo(
     () => [
@@ -644,11 +642,6 @@ export function ClientApp() {
     setCurrentIndex((value) => Math.min(value + 1, queue.length - 1));
   };
 
-  const handleShufflePlay = (collection = homeTracks) => {
-    if (!collection.length) return;
-    playTrackFromCollection(collection, Math.floor(Math.random() * collection.length));
-  };
-
   const toggleFavorite = (track) => {
     const trackKey = getTrackKey(track);
     setFavorites((value) => (value.some((item) => getTrackKey(item) === trackKey) ? value.filter((item) => getTrackKey(item) !== trackKey) : uniqueTracks([track, ...value])));
@@ -714,75 +707,21 @@ export function ClientApp() {
       return <EntityList items={folderCards} onSelect={handleSelectFolder} emptyMessage="Здесь появятся твои подборки." />;
     }
     return (
-      <div className="home-sections">
-        {searchAppliedQuery ? (
-          <ScreenSection title={`Результаты: ${searchAppliedQuery}`}>
-            <TrackList
-              tracks={searchResults}
-              activeTrackId={getTrackKey(currentTrack)}
-              onPlay={(index) => playTrackFromCollection(searchResults, index)}
-              favoriteTrackKeys={favoriteTrackKeys}
-              onToggleFavorite={toggleFavorite}
-              showFavoriteAction
-              emptyMessage={
-                isLoading
-                  ? "Загружаю результаты поиска..."
-                  : "По этому запросу ничего не найдено."
-              }
-            />
-          </ScreenSection>
-        ) : null}
-
-        <ScreenSection
-          title={tasteProfile.size > 0 ? "Для тебя" : "Популярные треки"}
-          actionLabel="Перемешать"
-          onAction={() => handleShufflePlay(recommendedTracks)}
-        >
-          <TrackList
-            tracks={recommendedTracks}
-            activeTrackId={getTrackKey(currentTrack)}
-            onPlay={(index) => playTrackFromCollection(recommendedTracks, index)}
-            favoriteTrackKeys={favoriteTrackKeys}
-            onToggleFavorite={toggleFavorite}
-            showFavoriteAction
-            emptyMessage={
-              catalogLoading
-                ? "Загружаю рекомендации..."
-                : "Рекомендации появятся после загрузки каталога."
-            }
-          />
-        </ScreenSection>
-
-        {tasteProfile.size > 0 ? (
-          <ScreenSection title="Популярные треки">
-            <TrackList
-              tracks={popularTracks}
-              activeTrackId={getTrackKey(currentTrack)}
-              onPlay={(index) => playTrackFromCollection(popularTracks, index)}
-              favoriteTrackKeys={favoriteTrackKeys}
-              onToggleFavorite={toggleFavorite}
-              showFavoriteAction
-              emptyMessage={
-                discoveryLoading || catalogLoading
-                  ? "Загружаю популярные треки..."
-                  : "Популярные треки появятся после импорта."
-              }
-            />
-          </ScreenSection>
-        ) : null}
-
-        <ScreenSection title={`Весь каталог${catalogTracks.length ? ` • ${catalogTracks.length}` : ""}`}>
-          <TrackList
-            tracks={catalogTracks}
-            activeTrackId={getTrackKey(currentTrack)}
-            onPlay={(index) => playTrackFromCollection(catalogTracks, index)}
-            favoriteTrackKeys={favoriteTrackKeys}
-            onToggleFavorite={toggleFavorite}
-            showFavoriteAction
-            emptyMessage={catalogLoading ? "Загружаю весь каталог..." : "Каталог пока пуст."}
-          />
-        </ScreenSection>
-      </div>
+      <TrackList
+        tracks={homeTracks}
+        activeTrackId={getTrackKey(currentTrack)}
+        onPlay={(index) => playTrackFromCollection(homeTracks, index)}
+        favoriteTrackKeys={favoriteTrackKeys}
+        onToggleFavorite={toggleFavorite}
+        showFavoriteAction
+        emptyMessage={
+          isLoading || catalogLoading || discoveryLoading
+            ? "Загружаю треки..."
+            : searchAppliedQuery
+              ? "По этому запросу ничего не найдено."
+              : "Каталог пока пуст."
+        }
+      />
     );
   };
 
@@ -807,7 +746,6 @@ export function ClientApp() {
           ))}
         </div>
         <div className="library-toolbar__actions">
-          <ScreenButton label="Перемешать" onClick={handleShufflePlay}><ShuffleIcon /></ScreenButton>
           <ScreenButton label="Моя музыка" onClick={() => setActiveTab("mine")}><QueueIcon /></ScreenButton>
         </div>
       </div>

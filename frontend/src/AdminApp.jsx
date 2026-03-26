@@ -219,6 +219,7 @@ export function AdminApp() {
   });
   const terminalBodyRef = useRef(null);
   const parserFormDirtyRef = useRef(false);
+  const parserAutosaveRef = useRef(null);
 
   const [adminKey, setAdminKey] = useState(
     () => window.localStorage.getItem("music-admin-key") || "",
@@ -311,6 +312,22 @@ export function AdminApp() {
   useEffect(() => {
     parserFormDirtyRef.current = isParserFormDirty;
   }, [isParserFormDirty]);
+
+  useEffect(() => {
+    if (!adminKey || !isParserFormDirty) {
+      return undefined;
+    }
+
+    parserAutosaveRef.current = window.setTimeout(() => {
+      void handleParserSave({ silent: true });
+    }, 700);
+
+    return () => {
+      if (parserAutosaveRef.current) {
+        window.clearTimeout(parserAutosaveRef.current);
+      }
+    };
+  }, [adminKey, isParserFormDirty, parserForm]);
 
   useEffect(() => {
     if (!autoScrollLogs || !terminalBodyRef.current) {
@@ -424,6 +441,9 @@ export function AdminApp() {
   }
 
   async function handleRefreshDashboard() {
+    if (parserAutosaveRef.current) {
+      window.clearTimeout(parserAutosaveRef.current);
+    }
     setIsParserFormDirty(false);
     await loadDashboard({ ...latestParamsRef.current, forceParserFormSync: true });
   }
@@ -487,9 +507,15 @@ export function AdminApp() {
     }
   }
 
-  async function handleParserSave() {
-    setError("");
-    setMessage("");
+  async function handleParserSave(options = {}) {
+    if (parserAutosaveRef.current) {
+      window.clearTimeout(parserAutosaveRef.current);
+    }
+
+    if (!options.silent) {
+      setError("");
+      setMessage("");
+    }
 
     try {
       await adminRequest("/admin/parser", adminKey, {
@@ -503,7 +529,9 @@ export function AdminApp() {
         }),
         headers: { "Content-Type": "application/json" },
       });
-      setMessage("Настройки парсера сохранены.");
+      if (!options.silent) {
+        setMessage("Настройки парсера сохранены.");
+      }
       setIsParserFormDirty(false);
       await loadDashboard({ forceParserFormSync: true });
     } catch (requestError) {
