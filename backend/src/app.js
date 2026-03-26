@@ -78,6 +78,18 @@ export function createApp() {
     }
   });
 
+  app.get("/catalog", async (req, res) => {
+    const limit = Math.min(Math.max(Number(req.query.limit || 200), 1), 500);
+    const offset = Math.max(Number(req.query.offset || 0), 0);
+    const tracks = await listTracks({
+      isActive: true,
+      limit,
+      offset,
+    });
+
+    return res.json(tracks);
+  });
+
   app.use("/admin", requireAdmin);
 
   app.get("/admin/stats", async (_req, res) => {

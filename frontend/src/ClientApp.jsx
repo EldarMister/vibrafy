@@ -16,6 +16,8 @@ const STORAGE_KEYS = {
 };
 
 const MAX_RECENT_TRACKS = 20;
+const PUBLIC_CATALOG_PAGE_SIZE = 250;
+const PUBLIC_CATALOG_MAX_TRACKS = 2000;
 const DISCOVERY_QUERIES = ["MiyaGi", "Bakr", "Бек Борбиев"];
 const DEFAULT_PLAYER_TRACK_INDEX = 2;
 const HAS_REMOTE_API = Boolean(import.meta.env.VITE_API_BASE_URL);
@@ -46,9 +48,41 @@ const DEFAULT_SHOWCASE_TRACKS = [
   cover: `https://picsum.photos/seed/${seed}/160/160`,
 }));
 
+const DEFAULT_COVER_POOL = DEFAULT_SHOWCASE_TRACKS.map((track) => track.cover);
+
 function getTrackKey(track) {
   if (!track) return "";
   return String(track.id || track.source_track_id || track.audio_url || `${track.title}-${track.artist}`);
+}
+
+function hashString(value) {
+  return [...String(value || "vibrafy")].reduce(
+    (hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0,
+    7,
+  );
+}
+
+function getFallbackCover(track) {
+  if (DEFAULT_COVER_POOL.length === 0) {
+    return "";
+  }
+
+  const index =
+    hashString(getTrackKey(track) || track?.title || track?.artist) %
+    DEFAULT_COVER_POOL.length;
+
+  return DEFAULT_COVER_POOL[index];
+}
+
+function normalizeTrack(track) {
+  if (!track) {
+    return null;
+  }
+
+  return {
+    ...track,
+    cover: track.cover || getFallbackCover(track),
+  };
 }
 
 function readStoredJson(key, fallback) {
@@ -77,9 +111,17 @@ function writeStoredText(key, value) {
 function uniqueTracks(tracks) {
   const map = new Map();
   for (const track of tracks) {
-    if (track) map.set(getTrackKey(track), track);
+    const normalizedTrack = normalizeTrack(track);
+    if (normalizedTrack) map.set(getTrackKey(normalizedTrack), normalizedTrack);
   }
   return [...map.values()];
+}
+
+function normalizePlaylists(playlists) {
+  return (playlists || []).map((playlist) => ({
+    ...playlist,
+    tracks: uniqueTracks(playlist.tracks || []),
+  }));
 }
 
 function upsertRecentTrack(tracks, nextTrack) {
@@ -92,6 +134,24 @@ function createPlaylistId() {
 
 function splitArtistNames(artist) {
   return artist.split(/\s*(?:,|&|feat\.?|ft\.?|x|\/)\s*/i).map((item) => item.trim()).filter(Boolean);
+}
+
+function getTrackPopularityScore(track) {
+  const sectionBoost = {
+    best: 30,
+    best_month: 26,
+    best_week: 24,
+    top: 22,
+    news: 16,
+    manual: 8,
+  };
+
+  return (
+    (sectionBoost[track.source_section] || 12) +
+    (track.is_manual ? 2 : 0) +
+    (track.genre_name ? 1 : 0) +
+    (track.catalog_artist_name ? 1 : 0)
+  );
 }
 
 function buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }) {
@@ -137,10 +197,53 @@ function buildTrackRanking(tracks, tasteProfile, favoriteTrackKeys, recentTrackK
       (sum, artistName) => sum + (tasteProfile.get(artistName.toLowerCase()) || 0),
       0,
     );
-    return artistScore + (favoriteTrackKeys.has(getTrackKey(track)) ? 8 : 0) + (recentTrackKeys.has(getTrackKey(track)) ? 4 : 0);
+    return (
+      artistScore +
+      getTrackPopularityScore(track) +
+      (favoriteTrackKeys.has(getTrackKey(track)) ? 8 : 0) +
+      (recentTrackKeys.has(getTrackKey(track)) ? 4 : 0)
+    );
   };
 
   return [...tracks].sort((left, right) => scoreTrack(right) - scoreTrack(left));
+}
+
+function buildPopularTracks(tracks) {
+  return [...tracks].sort((left, right) => {
+    const scoreDiff = getTrackPopularityScore(right) - getTrackPopularityScore(left);
+
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+
+    return String(left.title).localeCompare(String(right.title), "ru");
+  });
+}
+
+async function loadCatalogTracksFromApi() {
+  let offset = 0;
+  let total = 0;
+  const collectedTracks = [];
+
+  do {
+    const response = await apiRequest(
+      `/catalog?limit=${PUBLIC_CATALOG_PAGE_SIZE}&offset=${offset}`,
+    );
+    const items = uniqueTracks(response.items || []);
+
+    collectedTracks.push(...items);
+    total = Number(response.total || collectedTracks.length);
+    offset += items.length;
+
+    if (items.length === 0) {
+      break;
+    }
+  } while (
+    offset < total &&
+    collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS
+  );
+
+  return uniqueTracks(collectedTracks);
 }
 
 function buildMixCards(playlists, rankedTracks) {
@@ -236,19 +339,29 @@ export function ClientApp() {
   const telegram = useTelegram();
   const audioRef = useRef(null);
   const playbackIntentRef = useRef(false);
+  const catalogLoadedRef = useRef(false);
   const [activeTab, setActiveTab] = useState("home");
   const [homeMode, setHomeMode] = useState("songs");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState(() => readStoredText(STORAGE_KEYS.query, ""));
-  const [tracks, setTracks] = useState(() => readStoredJson(STORAGE_KEYS.tracks, []));
-  const [favorites, setFavorites] = useState(() => readStoredJson(STORAGE_KEYS.favorites, []));
-  const [recentTracks, setRecentTracks] = useState(() => readStoredJson(STORAGE_KEYS.recent, []));
-  const [playlists, setPlaylists] = useState(() => readStoredJson(STORAGE_KEYS.playlists, []));
+  const [tracks, setTracks] = useState(() => uniqueTracks(readStoredJson(STORAGE_KEYS.tracks, [])));
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchAppliedQuery, setSearchAppliedQuery] = useState("");
+  const [favorites, setFavorites] = useState(() =>
+    uniqueTracks(readStoredJson(STORAGE_KEYS.favorites, [])),
+  );
+  const [recentTracks, setRecentTracks] = useState(() =>
+    uniqueTracks(readStoredJson(STORAGE_KEYS.recent, [])),
+  );
+  const [playlists, setPlaylists] = useState(() =>
+    normalizePlaylists(readStoredJson(STORAGE_KEYS.playlists, [])),
+  );
   const [discoveryTracks, setDiscoveryTracks] = useState(() => {
-    const storedDiscovery = readStoredJson(STORAGE_KEYS.discovery, []);
+    const storedDiscovery = uniqueTracks(readStoredJson(STORAGE_KEYS.discovery, []));
     return storedDiscovery.length > 0 ? storedDiscovery : DEFAULT_SHOWCASE_TRACKS;
   });
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [queue, setQueue] = useState(DEFAULT_SHOWCASE_TRACKS);
   const [currentIndex, setCurrentIndex] = useState(DEFAULT_PLAYER_TRACK_INDEX);
@@ -262,24 +375,48 @@ export function ClientApp() {
   const [selectedTrackKey, setSelectedTrackKey] = useState("");
 
   const currentTrack = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
+  const catalogTracks = useMemo(
+    () => (tracks.length > 0 ? tracks : discoveryTracks),
+    [tracks, discoveryTracks],
+  );
   const allKnownTracks = useMemo(
-    () => uniqueTracks([...tracks, ...favorites, ...recentTracks, ...playlists.flatMap((playlist) => playlist.tracks), ...discoveryTracks, currentTrack]),
-    [tracks, favorites, recentTracks, playlists, discoveryTracks, currentTrack],
+    () =>
+      uniqueTracks([
+        ...catalogTracks,
+        ...searchResults,
+        ...favorites,
+        ...recentTracks,
+        ...playlists.flatMap((playlist) => playlist.tracks),
+        ...discoveryTracks,
+        currentTrack,
+      ]),
+    [catalogTracks, searchResults, favorites, recentTracks, playlists, discoveryTracks, currentTrack],
   );
   const favoriteTrackKeys = useMemo(() => new Set(favorites.map((track) => getTrackKey(track))), [favorites]);
   const recentTrackKeys = useMemo(() => new Set(recentTracks.map((track) => getTrackKey(track))), [recentTracks]);
   const tasteProfile = useMemo(() => buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }), [recentTracks, favorites, playlists, currentTrack]);
   const artistCards = useMemo(() => buildArtistCards(allKnownTracks, tasteProfile), [allKnownTracks, tasteProfile]);
   const rankedTracks = useMemo(() => buildTrackRanking(allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys), [allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys]);
+  const popularTracks = useMemo(
+    () => buildPopularTracks(uniqueTracks([...discoveryTracks, ...catalogTracks])).slice(0, 12),
+    [discoveryTracks, catalogTracks],
+  );
+  const recommendedTracks = useMemo(
+    () => (tasteProfile.size > 0 ? rankedTracks.slice(0, 12) : popularTracks),
+    [tasteProfile, rankedTracks, popularTracks],
+  );
   const mixCards = useMemo(() => buildMixCards(playlists, rankedTracks), [playlists, rankedTracks]);
-  const homeTracks = useMemo(() => (tracks.length > 0 ? tracks : rankedTracks.length > 0 ? rankedTracks : discoveryTracks), [tracks, rankedTracks, discoveryTracks]);
+  const homeTracks = useMemo(
+    () => (searchResults.length > 0 ? searchResults : catalogTracks),
+    [searchResults, catalogTracks],
+  );
   const folderCards = useMemo(
     () => [
       { id: "folder-recent", title: "Недавние", subtitle: `${recentTracks.length} треков`, cover: recentTracks[0]?.cover || null },
       { id: "folder-favorites", title: "Избранное", subtitle: `${favorites.length} треков`, cover: favorites[0]?.cover || null },
-      { id: "folder-library", title: "Каталог", subtitle: `${homeTracks.length} треков`, cover: homeTracks[0]?.cover || null },
+      { id: "folder-library", title: "Каталог", subtitle: `${catalogTracks.length} треков`, cover: catalogTracks[0]?.cover || null },
     ],
-    [recentTracks, favorites, homeTracks],
+    [recentTracks, favorites, catalogTracks],
   );
 
   useEffect(() => writeStoredText(STORAGE_KEYS.query, query), [query]);
@@ -288,6 +425,11 @@ export function ClientApp() {
   useEffect(() => writeStoredJson(STORAGE_KEYS.recent, recentTracks), [recentTracks]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.playlists, playlists), [playlists]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.discovery, discoveryTracks), [discoveryTracks]);
+  useEffect(() => {
+    if (!HAS_REMOTE_API) {
+      setTracks((value) => uniqueTracks([...value, ...DEFAULT_SHOWCASE_TRACKS]));
+    }
+  }, []);
   useEffect(() => {
     if (!HAS_REMOTE_API && discoveryTracks.length === 0) setDiscoveryTracks(DEFAULT_SHOWCASE_TRACKS);
   }, [discoveryTracks]);
@@ -318,6 +460,41 @@ export function ClientApp() {
       headers: { "Content-Type": "application/json" },
     }).catch(() => {});
   }, [telegram]);
+
+  useEffect(() => {
+    if (!HAS_REMOTE_API || catalogLoading || catalogLoadedRef.current) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    async function loadCatalog() {
+      catalogLoadedRef.current = true;
+      setCatalogLoading(true);
+
+      try {
+        const catalog = await loadCatalogTracksFromApi();
+
+        if (!isCancelled && catalog.length > 0) {
+          setTracks(catalog);
+        }
+      } catch {
+        if (!isCancelled && tracks.length === 0) {
+          setTracks(DEFAULT_SHOWCASE_TRACKS);
+        }
+      } finally {
+        if (!isCancelled) {
+          setCatalogLoading(false);
+        }
+      }
+    }
+
+    loadCatalog();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [catalogLoading, tracks.length]);
 
   useEffect(() => {
     if (!HAS_REMOTE_API || discoveryTracks.length > 0 || discoveryLoading) return;
@@ -398,9 +575,14 @@ export function ClientApp() {
 
   async function runSearch(searchValue) {
     const normalizedQuery = searchValue.trim();
-    if (!normalizedQuery) return;
+    if (!normalizedQuery) {
+      setSearchAppliedQuery("");
+      setSearchResults([]);
+      return;
+    }
 
     setQuery(normalizedQuery);
+    setSearchAppliedQuery(normalizedQuery);
     setActiveTab("home");
     setHomeMode("songs");
     setIsLoading(true);
@@ -408,18 +590,18 @@ export function ClientApp() {
 
     if (!HAS_REMOTE_API) {
       const loweredQuery = normalizedQuery.toLowerCase();
-      const localCatalog = uniqueTracks([...allKnownTracks, ...DEFAULT_SHOWCASE_TRACKS]);
-      setTracks(localCatalog.filter((track) => `${track.title} ${track.artist}`.toLowerCase().includes(loweredQuery)));
+      const localCatalog = uniqueTracks([...catalogTracks, ...allKnownTracks, ...DEFAULT_SHOWCASE_TRACKS]);
+      setSearchResults(localCatalog.filter((track) => `${track.title} ${track.artist}`.toLowerCase().includes(loweredQuery)));
       setSearchOpen(false);
       setIsLoading(false);
       return;
     }
 
     try {
-      setTracks(await apiRequest(`/search?q=${encodeURIComponent(normalizedQuery)}`));
+      setSearchResults(uniqueTracks(await apiRequest(`/search?q=${encodeURIComponent(normalizedQuery)}`)));
       setSearchOpen(false);
     } catch (requestError) {
-      setTracks([]);
+      setSearchResults([]);
       setError(requestError instanceof Error ? requestError.message : "Не удалось выполнить поиск");
     } finally {
       setIsLoading(false);
@@ -462,9 +644,9 @@ export function ClientApp() {
     setCurrentIndex((value) => Math.min(value + 1, queue.length - 1));
   };
 
-  const handleShufflePlay = () => {
-    if (!homeTracks.length) return;
-    playTrackFromCollection(homeTracks, Math.floor(Math.random() * homeTracks.length));
+  const handleShufflePlay = (collection = homeTracks) => {
+    if (!collection.length) return;
+    playTrackFromCollection(collection, Math.floor(Math.random() * collection.length));
   };
 
   const toggleFavorite = (track) => {
@@ -531,7 +713,77 @@ export function ClientApp() {
     if (homeMode === "folder") {
       return <EntityList items={folderCards} onSelect={handleSelectFolder} emptyMessage="Здесь появятся твои подборки." />;
     }
-    return <TrackList tracks={homeTracks} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(homeTracks, index)} favoriteTrackKeys={favoriteTrackKeys} emptyMessage={isLoading ? "Загружаю треки..." : query ? "По этому запросу ничего не найдено." : "Популярные треки появятся после импорта."} />;
+    return (
+      <div className="home-sections">
+        {searchAppliedQuery ? (
+          <ScreenSection title={`Результаты: ${searchAppliedQuery}`}>
+            <TrackList
+              tracks={searchResults}
+              activeTrackId={getTrackKey(currentTrack)}
+              onPlay={(index) => playTrackFromCollection(searchResults, index)}
+              favoriteTrackKeys={favoriteTrackKeys}
+              onToggleFavorite={toggleFavorite}
+              showFavoriteAction
+              emptyMessage={
+                isLoading
+                  ? "Загружаю результаты поиска..."
+                  : "По этому запросу ничего не найдено."
+              }
+            />
+          </ScreenSection>
+        ) : null}
+
+        <ScreenSection
+          title={tasteProfile.size > 0 ? "Для тебя" : "Популярные треки"}
+          actionLabel="Перемешать"
+          onAction={() => handleShufflePlay(recommendedTracks)}
+        >
+          <TrackList
+            tracks={recommendedTracks}
+            activeTrackId={getTrackKey(currentTrack)}
+            onPlay={(index) => playTrackFromCollection(recommendedTracks, index)}
+            favoriteTrackKeys={favoriteTrackKeys}
+            onToggleFavorite={toggleFavorite}
+            showFavoriteAction
+            emptyMessage={
+              catalogLoading
+                ? "Загружаю рекомендации..."
+                : "Рекомендации появятся после загрузки каталога."
+            }
+          />
+        </ScreenSection>
+
+        {tasteProfile.size > 0 ? (
+          <ScreenSection title="Популярные треки">
+            <TrackList
+              tracks={popularTracks}
+              activeTrackId={getTrackKey(currentTrack)}
+              onPlay={(index) => playTrackFromCollection(popularTracks, index)}
+              favoriteTrackKeys={favoriteTrackKeys}
+              onToggleFavorite={toggleFavorite}
+              showFavoriteAction
+              emptyMessage={
+                discoveryLoading || catalogLoading
+                  ? "Загружаю популярные треки..."
+                  : "Популярные треки появятся после импорта."
+              }
+            />
+          </ScreenSection>
+        ) : null}
+
+        <ScreenSection title={`Весь каталог${catalogTracks.length ? ` • ${catalogTracks.length}` : ""}`}>
+          <TrackList
+            tracks={catalogTracks}
+            activeTrackId={getTrackKey(currentTrack)}
+            onPlay={(index) => playTrackFromCollection(catalogTracks, index)}
+            favoriteTrackKeys={favoriteTrackKeys}
+            onToggleFavorite={toggleFavorite}
+            showFavoriteAction
+            emptyMessage={catalogLoading ? "Загружаю весь каталог..." : "Каталог пока пуст."}
+          />
+        </ScreenSection>
+      </div>
+    );
   };
 
   const renderHomeTab = () => (

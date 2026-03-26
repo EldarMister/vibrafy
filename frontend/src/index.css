@@ -1520,6 +1520,12 @@ button {
   gap: 10px;
 }
 
+.home-sections {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+
 .library-list,
 .entity-list {
   display: grid;
