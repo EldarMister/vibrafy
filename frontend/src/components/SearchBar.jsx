@@ -1,9 +1,7 @@
 export function SearchBar({
   value,
   onChange,
-  isLoading,
   onClose,
-  resultCount = 0,
 }) {
   const hasValue = value.trim().length > 0;
 
@@ -30,14 +28,6 @@ export function SearchBar({
           Скрыть
         </button>
       ) : null}
-
-      <p className="search-inline__hint">
-        {hasValue
-          ? isLoading
-            ? "Ищу без Enter..."
-            : `Найдено ${resultCount} треков`
-          : "Поиск работает сразу, без Enter."}
-      </p>
     </div>
   );
 }

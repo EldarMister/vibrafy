@@ -15,8 +15,10 @@ const STORAGE_KEYS = {
 };
 
 const MAX_RECENT_TRACKS = 20;
-const PUBLIC_CATALOG_PAGE_SIZE = 500;
+const INITIAL_CATALOG_PAGE_SIZE = 180;
+const BACKGROUND_CATALOG_PAGE_SIZE = 1000;
 const PUBLIC_CATALOG_MAX_TRACKS = 10000;
+const REMOTE_CATALOG_CACHE_MIN_TRACKS = 500;
 const SEARCH_DEBOUNCE_MS = 280;
 const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 const HAS_REMOTE_API = Boolean(import.meta.env.VITE_API_BASE_URL);
@@ -299,26 +301,13 @@ function rankTracksBySearch(tracks, query, tasteProfile, favoriteTrackKeys, rece
     .map((item) => item.track);
 }
 
-async function loadCatalogTracksFromApi() {
-  let offset = 0;
-  let total = 0;
-  const collectedTracks = [];
-
-  do {
-    const response = await apiRequest(`/catalog?limit=${PUBLIC_CATALOG_PAGE_SIZE}&offset=${offset}`);
-    const items = uniqueTracks(response.items || []);
-
-    collectedTracks.push(...items);
-    total = Number(response.total || collectedTracks.length);
-    offset += items.length;
-
-    if (items.length === 0) {
-      break;
-    }
-  } while (offset < total && collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS);
+async function loadCatalogTracksFromApi(limit, offset = 0) {
+  const response = await apiRequest(`/catalog?limit=${limit}&offset=${offset}`);
+  const items = uniqueTracks(response.items || []);
+  const total = Number(response.total || items.length);
 
   return {
-    items: uniqueTracks(collectedTracks),
+    items,
     total,
   };
 }
@@ -375,6 +364,16 @@ function ScreenSection({ action, children, title }) {
   );
 }
 
+function getInitialCatalogTracks() {
+  const cachedTracks = uniqueTracks(readStoredJson(STORAGE_KEYS.tracks, []));
+
+  if (!HAS_REMOTE_API) {
+    return cachedTracks;
+  }
+
+  return cachedTracks.length >= REMOTE_CATALOG_CACHE_MIN_TRACKS ? cachedTracks : [];
+}
+
 export function ClientApp() {
   const telegram = useTelegram();
   const audioRef = useRef(null);
@@ -386,9 +385,7 @@ export function ClientApp() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [tracks, setTracks] = useState(() =>
-    HAS_REMOTE_API ? [] : uniqueTracks(readStoredJson(STORAGE_KEYS.tracks, [])),
-  );
+  const [tracks, setTracks] = useState(() => getInitialCatalogTracks());
   const [searchResults, setSearchResults] = useState([]);
   const [favorites, setFavorites] = useState(() =>
     uniqueTracks(readStoredJson(STORAGE_KEYS.favorites, [])),
@@ -406,7 +403,7 @@ export function ClientApp() {
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState("off");
   const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogTotal, setCatalogTotal] = useState(() => getInitialCatalogTracks().length);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [error, setError] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -500,6 +497,11 @@ export function ClientApp() {
   useEffect(() => {
     if (!HAS_REMOTE_API) {
       writeStoredJson(STORAGE_KEYS.tracks, tracks);
+      return;
+    }
+
+    if (tracks.length >= REMOTE_CATALOG_CACHE_MIN_TRACKS) {
+      writeStoredJson(STORAGE_KEYS.tracks, tracks);
     }
   }, [tracks]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.favorites, favorites), [favorites]);
@@ -581,20 +583,43 @@ export function ClientApp() {
 
     async function loadCatalog() {
       catalogLoadedRef.current = true;
-      setCatalogLoading(true);
+      setCatalogLoading(tracks.length === 0);
       setError("");
 
       try {
-        const catalog = await loadCatalogTracksFromApi();
+        const initialCatalog = await loadCatalogTracksFromApi(INITIAL_CATALOG_PAGE_SIZE, 0);
 
         if (!isCancelled) {
-          setTracks(catalog.items);
-          setCatalogTotal(catalog.total || catalog.items.length);
+          const initialItems = initialCatalog.items.slice(0, PUBLIC_CATALOG_MAX_TRACKS);
+          setTracks(initialItems);
+          setCatalogTotal(initialCatalog.total || initialItems.length);
+          setCatalogLoading(false);
+
+          let collectedTracks = initialItems;
+          let offset = initialItems.length;
+          const total = initialCatalog.total || initialItems.length;
+
+          while (!isCancelled && offset < total && collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS) {
+            const nextCatalog = await loadCatalogTracksFromApi(BACKGROUND_CATALOG_PAGE_SIZE, offset);
+
+            if (nextCatalog.items.length === 0) {
+              break;
+            }
+
+            collectedTracks = uniqueTracks([...collectedTracks, ...nextCatalog.items]).slice(
+              0,
+              PUBLIC_CATALOG_MAX_TRACKS,
+            );
+            offset += nextCatalog.items.length;
+            setTracks(collectedTracks);
+          }
         }
       } catch (requestError) {
         if (!isCancelled) {
-          setTracks([]);
-          setCatalogTotal(0);
+          if (tracks.length === 0) {
+            setTracks([]);
+            setCatalogTotal(0);
+          }
           setError(
             requestError instanceof Error
               ? `Не удалось загрузить каталог: ${requestError.message}`
@@ -613,7 +638,7 @@ export function ClientApp() {
     return () => {
       isCancelled = true;
     };
-  }, [catalogLoading]);
+  }, [catalogLoading, tracks.length]);
 
   useEffect(() => {
     if (currentTrack || rankedCatalogTracks.length === 0) {
@@ -1073,8 +1098,6 @@ export function ClientApp() {
             setActiveTab("home");
           }}
           onClose={() => setSearchOpen(false)}
-          isLoading={isSearchLoading}
-          resultCount={homeTracks.length}
         />
       ) : null}
 
