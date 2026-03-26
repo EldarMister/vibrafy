@@ -317,7 +317,10 @@ async function loadCatalogTracksFromApi() {
     }
   } while (offset < total && collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS);
 
-  return uniqueTracks(collectedTracks);
+  return {
+    items: uniqueTracks(collectedTracks),
+    total,
+  };
 }
 
 function formatSleepRemaining(sleepEndsAt, now) {
@@ -342,13 +345,12 @@ function SearchIcon() {
   );
 }
 
-function SleepIcon() {
+function MoreIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M14.7 4.8a6.8 6.8 0 1 0 4.5 11.8 7.6 7.6 0 1 1-4.5-11.8Z"
-        fill="currentColor"
-      />
+      <circle cx="12" cy="5.5" r="1.8" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+      <circle cx="12" cy="18.5" r="1.8" fill="currentColor" />
     </svg>
   );
 }
@@ -382,9 +384,11 @@ export function ClientApp() {
 
   const [activeTab, setActiveTab] = useState("home");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [sleepPanelOpen, setSleepPanelOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [tracks, setTracks] = useState(() => uniqueTracks(readStoredJson(STORAGE_KEYS.tracks, [])));
+  const [tracks, setTracks] = useState(() =>
+    HAS_REMOTE_API ? [] : uniqueTracks(readStoredJson(STORAGE_KEYS.tracks, [])),
+  );
   const [searchResults, setSearchResults] = useState([]);
   const [favorites, setFavorites] = useState(() =>
     uniqueTracks(readStoredJson(STORAGE_KEYS.favorites, [])),
@@ -402,6 +406,7 @@ export function ClientApp() {
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState("off");
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [error, setError] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -492,7 +497,11 @@ export function ClientApp() {
     };
   }
 
-  useEffect(() => writeStoredJson(STORAGE_KEYS.tracks, tracks), [tracks]);
+  useEffect(() => {
+    if (!HAS_REMOTE_API) {
+      writeStoredJson(STORAGE_KEYS.tracks, tracks);
+    }
+  }, [tracks]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.favorites, favorites), [favorites]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.recent, recentTracks), [recentTracks]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.playlists, playlists), [playlists]);
@@ -579,10 +588,13 @@ export function ClientApp() {
         const catalog = await loadCatalogTracksFromApi();
 
         if (!isCancelled) {
-          setTracks(catalog);
+          setTracks(catalog.items);
+          setCatalogTotal(catalog.total || catalog.items.length);
         }
       } catch (requestError) {
         if (!isCancelled) {
+          setTracks([]);
+          setCatalogTotal(0);
           setError(
             requestError instanceof Error
               ? `Не удалось загрузить каталог: ${requestError.message}`
@@ -793,7 +805,7 @@ export function ClientApp() {
       const audio = audioRef.current;
       audio?.pause();
       setSleepEndsAt(0);
-      setSleepPanelOpen(false);
+      setMenuOpen(false);
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -824,7 +836,7 @@ export function ClientApp() {
     setQueue(nextQueue);
     setCurrentIndex(nextIndex);
     setSearchOpen(false);
-    setSleepPanelOpen(false);
+    setMenuOpen(false);
     setIsFullPlayerOpen(true);
     rememberTrack(targetTrack);
   }
@@ -978,63 +990,81 @@ export function ClientApp() {
 
   function handleSleepTimerSelect(minutes) {
     setSleepEndsAt(Date.now() + minutes * 60 * 1000);
-    setSleepPanelOpen(false);
+    setMenuOpen(false);
   }
 
   function clearSleepTimer() {
     setSleepEndsAt(0);
-    setSleepPanelOpen(false);
+    setMenuOpen(false);
   }
 
   function handleSearchToggle() {
     setSearchOpen((value) => !value);
-    setSleepPanelOpen(false);
+    setMenuOpen(false);
   }
 
   const homeHint = query.trim()
     ? isSearchLoading
       ? "Ищу по каталогу и источнику в реальном времени..."
       : `Найдено ${homeTracks.length} треков`
-    : rankedCatalogTracks.length > 0
+    : catalogTotal > 0 || rankedCatalogTracks.length > 0
       ? tasteProfile.size > 0
-        ? `Сначала рекомендации по вкусу, ниже весь каталог • ${rankedCatalogTracks.length} треков`
-        : `Сначала популярные треки, ниже весь каталог • ${rankedCatalogTracks.length} треков`
+        ? `Сначала рекомендации по вкусу, ниже весь каталог • ${catalogTotal || rankedCatalogTracks.length} треков`
+        : `Сначала популярные треки, ниже весь каталог • ${catalogTotal || rankedCatalogTracks.length} треков`
       : "Каталог пока пуст.";
 
   const renderHomeTab = () => (
     <section className="player-screen">
       <header className="player-screen__header">
         <div className="player-screen__leading">
-          <div className="sleep-control">
-            <button
-              className={`sleep-control__button ${sleepEndsAt ? "sleep-control__button--active" : ""}`}
-              type="button"
+          <div className="player-screen__title-group">
+            <p>Главная</p>
+            <h1>Музыка</h1>
+          </div>
+        </div>
+
+        <div className="player-screen__actions">
+          <ScreenButton label="Поиск" onClick={handleSearchToggle}>
+            <SearchIcon />
+          </ScreenButton>
+
+          <div className="screen-menu">
+            <ScreenButton
+              label="Меню"
               onClick={() => {
-                setSleepPanelOpen((value) => !value);
+                setMenuOpen((value) => !value);
                 setSearchOpen(false);
               }}
             >
-              <SleepIcon />
-              <span>{sleepEndsAt ? `Сон ${formatSleepRemaining(sleepEndsAt, sleepNow)}` : "Таймер сна"}</span>
-            </button>
+              <MoreIcon />
+            </ScreenButton>
 
-            {sleepPanelOpen ? (
-              <div className="sleep-control__panel">
-                <strong>Таймер сна</strong>
-                <div className="sleep-control__options">
+            {menuOpen ? (
+              <div className="screen-menu__panel">
+                <div className="screen-menu__section">
+                  <strong>Таймер сна</strong>
+                  <span>
+                    {sleepEndsAt
+                      ? `Выключится через ${formatSleepRemaining(sleepEndsAt, sleepNow)}`
+                      : "Сейчас выключен"}
+                  </span>
+                </div>
+
+                <div className="screen-menu__options">
                   {SLEEP_TIMER_OPTIONS.map((minutes) => (
                     <button
                       key={minutes}
                       type="button"
-                      className="sleep-control__option"
+                      className="screen-menu__option"
                       onClick={() => handleSleepTimerSelect(minutes)}
                     >
                       {minutes} мин
                     </button>
                   ))}
                 </div>
+
                 <button
-                  className="sleep-control__clear"
+                  className="screen-menu__clear"
                   type="button"
                   onClick={clearSleepTimer}
                 >
@@ -1043,16 +1073,7 @@ export function ClientApp() {
               </div>
             ) : null}
           </div>
-
-          <div className="player-screen__title-group">
-            <p>Главная</p>
-            <h1>Музыка</h1>
-          </div>
         </div>
-
-        <ScreenButton label="Поиск" onClick={handleSearchToggle}>
-          <SearchIcon />
-        </ScreenButton>
       </header>
 
       {searchOpen ? (

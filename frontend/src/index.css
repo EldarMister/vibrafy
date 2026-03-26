@@ -1380,6 +1380,12 @@ button {
   gap: 12px;
 }
 
+.player-screen__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .player-screen__title-group {
   display: grid;
   gap: 2px;
@@ -1438,43 +1444,16 @@ button {
   height: 22px;
 }
 
-.sleep-control {
+.screen-menu {
   position: relative;
 }
 
-.sleep-control__button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  cursor: pointer;
-}
-
-.sleep-control__button--active {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.sleep-control__button svg {
-  width: 18px;
-  height: 18px;
-}
-
-.sleep-control__button span {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sleep-control__panel {
+.screen-menu__panel {
   position: absolute;
   top: calc(100% + 10px);
-  left: 0;
+  right: 0;
   z-index: 15;
-  min-width: 220px;
+  min-width: 236px;
   padding: 14px;
   border-radius: 18px;
   background: rgba(22, 22, 22, 0.98);
@@ -1482,32 +1461,43 @@ button {
   box-shadow: 0 24px 50px rgba(0, 0, 0, 0.42);
 }
 
-.sleep-control__panel strong {
-  display: block;
+.screen-menu__section {
+  display: grid;
+  gap: 6px;
   margin-bottom: 12px;
 }
 
-.sleep-control__options {
+.screen-menu__section strong {
+  display: block;
+}
+
+.screen-menu__section span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.screen-menu__options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.sleep-control__option,
-.sleep-control__clear {
+.screen-menu__option,
+.screen-menu__clear {
   border: 0;
   border-radius: 12px;
   cursor: pointer;
 }
 
-.sleep-control__option {
+.screen-menu__option {
   min-height: 40px;
   background: rgba(255, 255, 255, 0.07);
   color: #fff;
 }
 
-.sleep-control__clear {
+.screen-menu__clear {
   width: 100%;
   min-height: 40px;
   background: rgba(255, 255, 255, 0.1);
