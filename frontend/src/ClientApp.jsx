@@ -572,15 +572,17 @@ export function ClientApp() {
         <h1>Мое</h1>
         <button type="button" onClick={() => setActiveTab("playlists")}>Плейлисты</button>
       </header>
-      <ScreenSection title="Недавно слушал">
-        <TrackList tracks={recentTracks} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(recentTracks, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="История прослушивания пока пуста." />
-      </ScreenSection>
-      <ScreenSection title="Избранные треки">
-        <TrackList tracks={favorites} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(favorites, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="Добавляй треки в избранное прямо из плеера." />
-      </ScreenSection>
-      <ScreenSection title="Твои плейлисты" actionLabel="Открыть" onAction={() => setActiveTab("playlists")}>
-        <EntityList items={mixCards} onSelect={() => setActiveTab("playlists")} emptyMessage="Плейлистов пока нет." />
-      </ScreenSection>
+      <div className="stack-screen__body">
+        <ScreenSection title="Недавно слушал">
+          <TrackList tracks={recentTracks} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(recentTracks, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="История прослушивания пока пуста." />
+        </ScreenSection>
+        <ScreenSection title="Избранные треки">
+          <TrackList tracks={favorites} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(favorites, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="Добавляй треки в избранное прямо из плеера." />
+        </ScreenSection>
+        <ScreenSection title="Твои плейлисты" actionLabel="Открыть" onAction={() => setActiveTab("playlists")}>
+          <EntityList items={mixCards} onSelect={() => setActiveTab("playlists")} emptyMessage="Плейлистов пока нет." />
+        </ScreenSection>
+      </div>
     </section>
   );
 
@@ -591,49 +593,51 @@ export function ClientApp() {
         <h1>Плейлисты</h1>
         <span>{playlists.length}</span>
       </header>
-      <form className="playlist-builder" onSubmit={handleCreatePlaylist}>
-        <input className="search-inline__input" type="text" value={newPlaylistName} onChange={(event) => setNewPlaylistName(event.target.value)} placeholder="Название нового плейлиста" />
-        <button className="search-inline__submit" type="submit">Создать</button>
-      </form>
-      {playlists.length > 0 ? (
-        <form className="playlist-builder playlist-builder--secondary" onSubmit={handleQuickAddTrack}>
-          <select className="search-inline__input" value={selectedPlaylistId} onChange={(event) => setSelectedPlaylistId(event.target.value)}>
-            {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}
-          </select>
-          <select className="search-inline__input" value={selectedTrackKey} onChange={(event) => setSelectedTrackKey(event.target.value)}>
-            {allKnownTracks.map((track) => <option key={getTrackKey(track)} value={getTrackKey(track)}>{track.title} - {track.artist}</option>)}
-          </select>
-          <button className="search-inline__submit" type="submit">Добавить</button>
+      <div className="stack-screen__body">
+        <form className="playlist-builder" onSubmit={handleCreatePlaylist}>
+          <input className="search-inline__input" type="text" value={newPlaylistName} onChange={(event) => setNewPlaylistName(event.target.value)} placeholder="Название нового плейлиста" />
+          <button className="search-inline__submit" type="submit">Создать</button>
         </form>
-      ) : null}
-      <div className="playlist-stack">
-        {playlists.length > 0 ? playlists.map((playlist) => (
-          <article key={playlist.id} className="playlist-card">
-            <div className="playlist-card__header">
-              <div><h2>{playlist.name}</h2><p>{playlist.tracks.length} треков</p></div>
-              <div className="playlist-card__actions">
-                {currentTrack ? <button type="button" onClick={() => addTrackToPlaylist(playlist.id, currentTrack)}>Текущий</button> : null}
-                <button type="button" onClick={() => removePlaylist(playlist.id)}>Удалить</button>
+        {playlists.length > 0 ? (
+          <form className="playlist-builder playlist-builder--secondary" onSubmit={handleQuickAddTrack}>
+            <select className="search-inline__input" value={selectedPlaylistId} onChange={(event) => setSelectedPlaylistId(event.target.value)}>
+              {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}
+            </select>
+            <select className="search-inline__input" value={selectedTrackKey} onChange={(event) => setSelectedTrackKey(event.target.value)}>
+              {allKnownTracks.map((track) => <option key={getTrackKey(track)} value={getTrackKey(track)}>{track.title} - {track.artist}</option>)}
+            </select>
+            <button className="search-inline__submit" type="submit">Добавить</button>
+          </form>
+        ) : null}
+        <div className="playlist-stack">
+          {playlists.length > 0 ? playlists.map((playlist) => (
+            <article key={playlist.id} className="playlist-card">
+              <div className="playlist-card__header">
+                <div><h2>{playlist.name}</h2><p>{playlist.tracks.length} треков</p></div>
+                <div className="playlist-card__actions">
+                  {currentTrack ? <button type="button" onClick={() => addTrackToPlaylist(playlist.id, currentTrack)}>Текущий</button> : null}
+                  <button type="button" onClick={() => removePlaylist(playlist.id)}>Удалить</button>
+                </div>
               </div>
-            </div>
-            {playlist.tracks.length > 0 ? (
-              <div className="playlist-card__tracks">
-                {playlist.tracks.map((track, index) => (
-                  <div key={getTrackKey(track)} className="playlist-track">
-                    <button className="playlist-track__main" type="button" onClick={() => playTrackFromCollection(playlist.tracks, index)}>
-                      <div className="library-row__cover" aria-hidden="true">{track.cover ? <img src={track.cover} alt="" /> : <span>♪</span>}</div>
-                      <div className="library-row__copy"><h3>{track.title}</h3><p>{track.artist}</p></div>
-                    </button>
-                    <div className="playlist-track__actions">
-                      <button type="button" onClick={() => toggleFavorite(track)}>{favoriteTrackKeys.has(getTrackKey(track)) ? "♥" : "♡"}</button>
-                      <button type="button" onClick={() => removeTrackFromPlaylist(playlist.id, getTrackKey(track))}>Убрать</button>
+              {playlist.tracks.length > 0 ? (
+                <div className="playlist-card__tracks">
+                  {playlist.tracks.map((track, index) => (
+                    <div key={getTrackKey(track)} className="playlist-track">
+                      <button className="playlist-track__main" type="button" onClick={() => playTrackFromCollection(playlist.tracks, index)}>
+                        <div className="library-row__cover" aria-hidden="true">{track.cover ? <img src={track.cover} alt="" /> : <span>♪</span>}</div>
+                        <div className="library-row__copy"><h3>{track.title}</h3><p>{track.artist}</p></div>
+                      </button>
+                      <div className="playlist-track__actions">
+                        <button type="button" onClick={() => toggleFavorite(track)}>{favoriteTrackKeys.has(getTrackKey(track)) ? "♥" : "♡"}</button>
+                        <button type="button" onClick={() => removeTrackFromPlaylist(playlist.id, getTrackKey(track))}>Убрать</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : <div className="empty-state empty-state--flat"><p>Плейлист пуст. Добавь в него первый трек.</p></div>}
-          </article>
-        )) : <div className="empty-state empty-state--flat"><p>Создай первый плейлист, чтобы собирать музыку для себя.</p></div>}
+                  ))}
+                </div>
+              ) : <div className="empty-state empty-state--flat"><p>Плейлист пуст. Добавь в него первый трек.</p></div>}
+            </article>
+          )) : <div className="empty-state empty-state--flat"><p>Создай первый плейлист, чтобы собирать музыку для себя.</p></div>}
+        </div>
       </div>
     </section>
   );

@@ -1862,12 +1862,52 @@ button {
 }
 
 .app-shell--client {
-  padding: 8px 0 222px;
+  width: min(420px, 100%);
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.redesign-shell {
+  height: 100dvh;
 }
 
 .player-screen,
 .stack-screen {
-  padding-bottom: 176px;
+  height: 100dvh;
+  padding: 16px 14px 176px;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.player-screen {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.stack-screen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.player-screen__content,
+.stack-screen__body {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+}
+
+.player-screen__content::-webkit-scrollbar,
+.stack-screen__body::-webkit-scrollbar {
+  display: none;
+}
+
+.stack-screen__body {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 8px;
 }
 
 .mini-player {
@@ -2224,7 +2264,7 @@ button {
 
 @media (max-width: 420px) {
   .app-shell--client {
-    padding-bottom: 210px;
+    width: 100%;
   }
 
   .mini-player {
@@ -2233,5 +2273,11 @@ button {
 
   .bottom-nav {
     width: calc(100% - 18px);
+  }
+
+  .player-screen,
+  .stack-screen {
+    padding-left: 12px;
+    padding-right: 12px;
   }
 }
