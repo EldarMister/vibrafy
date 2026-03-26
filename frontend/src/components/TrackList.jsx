@@ -1,8 +1,23 @@
-export function TrackList({ tracks, activeTrackId, onPlay }) {
+function getTrackKey(track) {
+  if (!track) {
+    return "";
+  }
+
+  return String(track.id || track.source_track_id || track.audio_url);
+}
+
+export function TrackList({
+  tracks,
+  activeTrackId,
+  onPlay,
+  onToggleFavorite,
+  favoriteTrackKeys,
+  emptyMessage = "Ничего не найдено.",
+}) {
   if (!tracks.length) {
     return (
       <div className="empty-state">
-        <p>Ничего не найдено. Попробуйте другой запрос.</p>
+        <p>{emptyMessage}</p>
       </div>
     );
   }
@@ -10,11 +25,13 @@ export function TrackList({ tracks, activeTrackId, onPlay }) {
   return (
     <div className="track-list">
       {tracks.map((track, index) => {
-        const isActive = track.id === activeTrackId;
+        const trackKey = getTrackKey(track);
+        const isActive = track.id === activeTrackId || trackKey === activeTrackId;
+        const isFavorite = favoriteTrackKeys?.has(trackKey);
 
         return (
           <article
-            key={track.id || `${track.title}-${index}`}
+            key={trackKey || `${track.title}-${index}`}
             className={`track-card ${isActive ? "track-card--active" : ""}`}
           >
             <div className="track-card__meta">
@@ -32,9 +49,23 @@ export function TrackList({ tracks, activeTrackId, onPlay }) {
               </div>
             </div>
 
-            <button className="track-card__button" type="button" onClick={() => onPlay(index)}>
-              {isActive ? "Играет" : "Слушать"}
-            </button>
+            <div className="track-card__actions">
+              {onToggleFavorite ? (
+                <button
+                  className={`track-card__icon-button ${
+                    isFavorite ? "track-card__icon-button--active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => onToggleFavorite(track)}
+                >
+                  ♥
+                </button>
+              ) : null}
+
+              <button className="track-card__button" type="button" onClick={() => onPlay(index)}>
+                {isActive ? "Играет" : "Play"}
+              </button>
+            </div>
           </article>
         );
       })}

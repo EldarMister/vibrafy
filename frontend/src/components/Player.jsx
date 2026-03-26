@@ -20,35 +20,48 @@ export function Player({
   onSeek,
   onNext,
   onPrev,
+  isFavorite,
+  onToggleFavorite,
 }) {
   if (!track) {
-    return (
-      <section className="player player--empty">
-        <p>Выберите трек, чтобы начать воспроизведение.</p>
-      </section>
-    );
+    return null;
   }
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <section className="player">
+      <div className="player__progress-line" style={{ width: `${progress}%` }} />
+
       <div className="player__header">
-        <div>
-          <p className="player__eyebrow">Сейчас играет</p>
-          <h2 className="player__title">{track.title}</h2>
-          <p className="player__artist">{track.artist}</p>
+        <div className="player__track">
+          <div className="player__cover" aria-hidden="true">
+            {track.cover ? <img src={track.cover} alt="" /> : <span>♪</span>}
+          </div>
+
+          <div className="player__copy">
+            <p className="player__eyebrow">Сейчас играет</p>
+            <h2 className="player__title">{track.title}</h2>
+            <p className="player__artist">{track.artist}</p>
+          </div>
         </div>
 
         <div className="player__actions">
           <button type="button" onClick={onPrev}>
-            Назад
+            ‹‹
           </button>
           <button type="button" onClick={onTogglePlay}>
-            {isPlaying ? "Пауза" : "Слушать"}
+            {isPlaying ? "❚❚" : "▶"}
           </button>
           <button type="button" onClick={onNext}>
-            Далее
+            ››
+          </button>
+          <button
+            className={`player__favorite ${isFavorite ? "player__favorite--active" : ""}`}
+            type="button"
+            onClick={onToggleFavorite}
+          >
+            ♥
           </button>
         </div>
       </div>
