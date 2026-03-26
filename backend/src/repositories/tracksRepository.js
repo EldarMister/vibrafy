@@ -11,8 +11,55 @@ function mapTrack(row) {
     is_active: row.is_active,
     is_manual: row.is_manual,
     source_name: row.source_name,
+    catalog_artist_name: row.catalog_artist_name,
+    catalog_artist_slug: row.catalog_artist_slug,
+    catalog_artist_link: row.catalog_artist_link,
+    genre_name: row.genre_name,
+    genre_slug: row.genre_slug,
+    genre_link: row.genre_link,
+    source_page_url: row.source_page_url,
+    source_section: row.source_section,
     created_at: row.created_at,
     updated_at: row.updated_at,
+  };
+}
+
+function buildTrackWhere({ search = "", artist = "", genre = "", isActive }) {
+  const values = [];
+  const filters = [];
+
+  if (search.trim()) {
+    values.push(`%${search.trim().toLowerCase()}%`);
+    filters.push(
+      `(
+        LOWER(title) LIKE $${values.length}
+        OR LOWER(artist) LIKE $${values.length}
+        OR LOWER(COALESCE(catalog_artist_name, '')) LIKE $${values.length}
+        OR LOWER(COALESCE(genre_name, '')) LIKE $${values.length}
+      )`,
+    );
+  }
+
+  if (artist.trim()) {
+    values.push(`%${artist.trim().toLowerCase()}%`);
+    filters.push(
+      `(LOWER(COALESCE(catalog_artist_name, artist)) LIKE $${values.length})`,
+    );
+  }
+
+  if (genre.trim()) {
+    values.push(`%${genre.trim().toLowerCase()}%`);
+    filters.push(`LOWER(COALESCE(genre_name, '')) LIKE $${values.length}`);
+  }
+
+  if (typeof isActive === "boolean") {
+    values.push(isActive);
+    filters.push(`is_active = $${values.length}`);
+  }
+
+  return {
+    whereClause: filters.length ? `WHERE ${filters.join(" AND ")}` : "",
+    values,
   };
 }
 
@@ -26,6 +73,8 @@ export async function searchTracksInDb(search, limit = 30) {
         AND (
           LOWER(title) LIKE $1
           OR LOWER(artist) LIKE $1
+          OR LOWER(COALESCE(catalog_artist_name, '')) LIKE $1
+          OR LOWER(COALESCE(genre_name, '')) LIKE $1
           OR LOWER(title || ' ' || artist) LIKE $1
         )
       ORDER BY updated_at DESC, id DESC
@@ -37,34 +86,151 @@ export async function searchTracksInDb(search, limit = 30) {
   return result.rows.map(mapTrack);
 }
 
-export async function listTracks({ search = "", limit = 50, offset = 0 }) {
-  const values = [];
-  const filters = [];
+export async function listTracks({
+  search = "",
+  artist = "",
+  genre = "",
+  isActive,
+  limit = 50,
+  offset = 0,
+}) {
+  const { whereClause, values } = buildTrackWhere({
+    search,
+    artist,
+    genre,
+    isActive,
+  });
 
-  if (search.trim()) {
-    values.push(`%${search.trim().toLowerCase()}%`);
-    filters.push(
-      `(LOWER(title) LIKE $${values.length} OR LOWER(artist) LIKE $${values.length})`,
-    );
-  }
+  const countResult = await query(
+    `
+      SELECT COUNT(*)::INT AS total
+      FROM tracks
+      ${whereClause}
+    `,
+    values,
+  );
 
-  values.push(limit);
-  values.push(offset);
-
-  const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const rowsValues = [...values, limit, offset];
   const result = await query(
     `
       SELECT *
       FROM tracks
       ${whereClause}
       ORDER BY updated_at DESC, id DESC
-      LIMIT $${values.length - 1}
-      OFFSET $${values.length}
+      LIMIT $${rowsValues.length - 1}
+      OFFSET $${rowsValues.length}
+    `,
+    rowsValues,
+  );
+
+  return {
+    total: countResult.rows[0]?.total || 0,
+    items: result.rows.map(mapTrack),
+  };
+}
+
+export async function listCatalogArtists({ search = "", limit = 100, offset = 0 }) {
+  const values = [];
+  let whereClause = "";
+
+  if (search.trim()) {
+    values.push(`%${search.trim().toLowerCase()}%`);
+    whereClause = `
+      WHERE LOWER(COALESCE(catalog_artist_name, artist)) LIKE $${values.length}
+    `;
+  }
+
+  const countResult = await query(
+    `
+      SELECT COUNT(*)::INT AS total
+      FROM (
+        SELECT COALESCE(NULLIF(catalog_artist_name, ''), artist)
+        FROM tracks
+        ${whereClause}
+        GROUP BY 1
+      ) AS artist_groups
     `,
     values,
   );
 
-  return result.rows.map(mapTrack);
+  const listValues = [...values, limit, offset];
+  const result = await query(
+    `
+      SELECT
+        COALESCE(NULLIF(catalog_artist_name, ''), artist) AS name,
+        COALESCE(
+          NULLIF(catalog_artist_slug, ''),
+          REGEXP_REPLACE(LOWER(COALESCE(NULLIF(catalog_artist_name, ''), artist)), '[^a-z0-9а-яё]+', '-', 'g')
+        ) AS slug,
+        MAX(catalog_artist_link) AS link,
+        COUNT(*)::INT AS total_tracks,
+        COUNT(*) FILTER (WHERE is_active = TRUE)::INT AS active_tracks,
+        MAX(updated_at) AS updated_at
+      FROM tracks
+      ${whereClause}
+      GROUP BY 1, 2
+      ORDER BY active_tracks DESC, updated_at DESC, name ASC
+      LIMIT $${listValues.length - 1}
+      OFFSET $${listValues.length}
+    `,
+    listValues,
+  );
+
+  return {
+    total: countResult.rows[0]?.total || 0,
+    items: result.rows,
+  };
+}
+
+export async function listCatalogGenres({ search = "", limit = 100, offset = 0 }) {
+  const values = [];
+  let whereClause = `WHERE genre_name IS NOT NULL`;
+
+  if (search.trim()) {
+    values.push(`%${search.trim().toLowerCase()}%`);
+    whereClause += ` AND LOWER(genre_name) LIKE $${values.length}`;
+  }
+
+  const countResult = await query(
+    `
+      SELECT COUNT(*)::INT AS total
+      FROM (
+        SELECT genre_name
+        FROM tracks
+        ${whereClause}
+        GROUP BY genre_name
+      ) AS genre_groups
+    `,
+    values,
+  );
+
+  const listValues = [...values, limit, offset];
+  const result = await query(
+    `
+      SELECT
+        genre_name AS name,
+        COALESCE(
+          NULLIF(genre_slug, ''),
+          REGEXP_REPLACE(LOWER(genre_name), '[^a-z0-9а-яё]+', '-', 'g')
+        ) AS slug,
+        MAX(genre_link) AS link,
+        COUNT(*)::INT AS total_tracks,
+        COUNT(*) FILTER (WHERE is_active = TRUE)::INT AS active_tracks,
+        MAX(updated_at) AS updated_at
+      FROM tracks
+      ${whereClause}
+      GROUP BY 1, 2
+      ORDER BY active_tracks DESC, updated_at DESC, name ASC
+      LIMIT $${listValues.length - 1}
+      OFFSET $${listValues.length}
+    `,
+    listValues,
+  );
+
+  return {
+    total: countResult.rows[0]?.total || 0,
+    items: result.rows,
+  };
 }
 
 export async function createManualTrack(track) {
@@ -77,9 +243,10 @@ export async function createManualTrack(track) {
         cover,
         is_active,
         is_manual,
-        source_name
+        source_name,
+        catalog_artist_name
       )
-      VALUES ($1, $2, $3, $4, TRUE, TRUE, 'manual')
+      VALUES ($1, $2, $3, $4, TRUE, TRUE, 'manual', $2)
       RETURNING *
     `,
     [track.title, track.artist, track.audio_url, track.cover || null],
@@ -98,6 +265,8 @@ export async function updateTrack(id, track) {
         audio_url = $4,
         cover = $5,
         is_active = $6,
+        catalog_artist_name = COALESCE(NULLIF($7, ''), catalog_artist_name, $3),
+        genre_name = NULLIF($8, ''),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -109,6 +278,8 @@ export async function updateTrack(id, track) {
       track.audio_url,
       track.cover || null,
       track.is_active,
+      track.catalog_artist_name || "",
+      track.genre_name || "",
     ],
   );
 
@@ -143,9 +314,20 @@ export async function upsertParsedTracks(client, tracks) {
           cover,
           source_name,
           is_active,
-          is_manual
+          is_manual,
+          catalog_artist_name,
+          catalog_artist_slug,
+          catalog_artist_link,
+          genre_name,
+          genre_slug,
+          genre_link,
+          source_page_url,
+          source_section
         )
-        VALUES ($1, $2, $3, $4, $5, 'sefon', TRUE, FALSE)
+        VALUES (
+          $1, $2, $3, $4, $5, 'sefon', TRUE, FALSE,
+          $6, $7, $8, $9, $10, $11, $12, $13
+        )
         ON CONFLICT (source_track_id) DO UPDATE
         SET
           title = EXCLUDED.title,
@@ -153,6 +335,14 @@ export async function upsertParsedTracks(client, tracks) {
           audio_url = EXCLUDED.audio_url,
           cover = EXCLUDED.cover,
           is_active = TRUE,
+          catalog_artist_name = COALESCE(EXCLUDED.catalog_artist_name, tracks.catalog_artist_name),
+          catalog_artist_slug = COALESCE(EXCLUDED.catalog_artist_slug, tracks.catalog_artist_slug),
+          catalog_artist_link = COALESCE(EXCLUDED.catalog_artist_link, tracks.catalog_artist_link),
+          genre_name = COALESCE(EXCLUDED.genre_name, tracks.genre_name),
+          genre_slug = COALESCE(EXCLUDED.genre_slug, tracks.genre_slug),
+          genre_link = COALESCE(EXCLUDED.genre_link, tracks.genre_link),
+          source_page_url = COALESCE(EXCLUDED.source_page_url, tracks.source_page_url),
+          source_section = COALESCE(EXCLUDED.source_section, tracks.source_section),
           updated_at = NOW()
         RETURNING *
       `,
@@ -162,6 +352,14 @@ export async function upsertParsedTracks(client, tracks) {
         track.artist,
         track.audio_url,
         track.cover || null,
+        track.catalog_artist_name || null,
+        track.catalog_artist_slug || null,
+        track.catalog_artist_link || null,
+        track.genre_name || null,
+        track.genre_slug || null,
+        track.genre_link || null,
+        track.source_page_url || null,
+        track.source_section || null,
       ],
     );
 
@@ -176,11 +374,12 @@ export async function countTracks() {
     `
       SELECT
         COUNT(*)::INT AS total,
-        COUNT(*) FILTER (WHERE is_active = TRUE)::INT AS active
+        COUNT(*) FILTER (WHERE is_active = TRUE)::INT AS active,
+        COUNT(DISTINCT COALESCE(NULLIF(catalog_artist_name, ''), artist))::INT AS artists,
+        COUNT(DISTINCT genre_name)::INT AS genres
       FROM tracks
     `,
   );
 
   return result.rows[0];
 }
-

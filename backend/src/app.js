@@ -2,9 +2,9 @@ import cors from "cors";
 import express from "express";
 import {
   countTracks,
-  listTracks,
 } from "./repositories/tracksRepository.js";
 import {
+  getParserJobEvents,
   getParserSettings,
   getRecentParserJobs,
   updateParserSettings,
@@ -12,8 +12,13 @@ import {
 import { countUsers, upsertTelegramUser } from "./repositories/usersRepository.js";
 import {
   createManualTrack,
+  listCatalogArtists,
+  listCatalogGenres,
+  listTracks,
   runManualParser,
   searchLibrary,
+  startFullCatalogImport,
+  stopFullCatalogImport,
   softDeleteTrack,
   updateTrack,
 } from "./services/libraryService.js";
@@ -86,6 +91,10 @@ export function createApp() {
     return res.json({
       users: userCount,
       tracks: trackCount,
+      catalog: {
+        artists: trackCount.artists,
+        genres: trackCount.genres,
+      },
       parser: parserSettings,
       recent_jobs: jobs,
     });
@@ -93,10 +102,37 @@ export function createApp() {
 
   app.get("/admin/tracks", async (req, res) => {
     const search = String(req.query.search || "");
+    const artist = String(req.query.artist || "");
+    const genre = String(req.query.genre || "");
+    const activeOnly =
+      req.query.active === undefined ? undefined : req.query.active === "true";
     const limit = Math.min(Number(req.query.limit || 50), 100);
     const offset = Math.max(Number(req.query.offset || 0), 0);
-    const tracks = await listTracks({ search, limit, offset });
+    const tracks = await listTracks({
+      search,
+      artist,
+      genre,
+      isActive: activeOnly,
+      limit,
+      offset,
+    });
     return res.json(tracks);
+  });
+
+  app.get("/admin/artists", async (req, res) => {
+    const search = String(req.query.search || "");
+    const limit = Math.min(Number(req.query.limit || 100), 200);
+    const offset = Math.max(Number(req.query.offset || 0), 0);
+    const artists = await listCatalogArtists({ search, limit, offset });
+    return res.json(artists);
+  });
+
+  app.get("/admin/genres", async (req, res) => {
+    const search = String(req.query.search || "");
+    const limit = Math.min(Number(req.query.limit || 100), 200);
+    const offset = Math.max(Number(req.query.offset || 0), 0);
+    const genres = await listCatalogGenres({ search, limit, offset });
+    return res.json(genres);
   });
 
   app.post("/admin/tracks", async (req, res) => {
@@ -119,7 +155,15 @@ export function createApp() {
   });
 
   app.put("/admin/tracks/:id", async (req, res) => {
-    const { title, artist, audio_url: audioUrl, cover, is_active: isActive } =
+    const {
+      title,
+      artist,
+      audio_url: audioUrl,
+      cover,
+      is_active: isActive,
+      catalog_artist_name: catalogArtistName,
+      genre_name: genreName,
+    } =
       req.body || {};
 
     const track = await updateTrack(req.params.id, {
@@ -128,6 +172,10 @@ export function createApp() {
       audio_url: String(audioUrl || "").trim(),
       cover: cover ? String(cover).trim() : null,
       is_active: Boolean(isActive),
+      catalog_artist_name: catalogArtistName
+        ? String(catalogArtistName).trim()
+        : "",
+      genre_name: genreName ? String(genreName).trim() : "",
     });
 
     if (!track) {
@@ -168,9 +216,19 @@ export function createApp() {
         req.body?.request_delay_ms === undefined
           ? undefined
           : Number(req.body.request_delay_ms),
+      worker_concurrency:
+        req.body?.worker_concurrency === undefined
+          ? undefined
+          : Number(req.body.worker_concurrency),
     };
     const settings = await updateParserSettings(payload);
     return res.json(settings);
+  });
+
+  app.get("/admin/parser/jobs/:id/events", async (req, res) => {
+    const limit = Math.min(Number(req.query.limit || 200), 500);
+    const events = await getParserJobEvents(req.params.id, limit);
+    return res.json(events);
   });
 
   app.post("/admin/parser/run", async (req, res) => {
@@ -189,6 +247,25 @@ export function createApp() {
         details: error instanceof Error ? error.message : "Unknown parser error",
       });
     }
+  });
+
+  app.post("/admin/parser/catalog/start", async (_req, res) => {
+    try {
+      const job = await startFullCatalogImport();
+      return res.status(202).json(job);
+    } catch (error) {
+      return res.status(409).json({
+        message: error instanceof Error ? error.message : "Catalog parser start failed",
+      });
+    }
+  });
+
+  app.post("/admin/parser/catalog/stop", async (_req, res) => {
+    const settings = await stopFullCatalogImport();
+    return res.json({
+      success: true,
+      parser: settings,
+    });
   });
 
   return app;
