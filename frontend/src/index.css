@@ -1914,6 +1914,406 @@ button {
   bottom: 92px;
 }
 
+.admin-parser-shell {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.admin-parser__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-parser__header h2,
+.admin-parser-progress__header strong,
+.admin-parser-progress__quota-copy strong,
+.admin-parser-limit-button strong,
+.admin-terminal__header strong,
+.admin-terminal-line__level {
+  margin: 0;
+}
+
+.admin-parser__header p,
+.admin-parser-progress p,
+.admin-parser-metric p,
+.admin-parser-card-footnote span,
+.admin-terminal__header span {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-parser-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-parser-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.admin-parser-metric {
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 26px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(10, 23, 40, 0.9), rgba(11, 27, 42, 0.78));
+  box-shadow: var(--shadow);
+}
+
+.admin-parser-metric > span {
+  color: rgba(203, 213, 225, 0.86);
+  font-size: 14px;
+}
+
+.admin-parser-metric > strong {
+  font-size: clamp(24px, 3vw, 40px);
+  line-height: 1;
+}
+
+.admin-parser-metric--status {
+  background: linear-gradient(180deg, rgba(8, 38, 55, 0.92), rgba(10, 31, 44, 0.86));
+  border-color: rgba(45, 212, 191, 0.22);
+}
+
+.admin-parser-metric--success {
+  background: linear-gradient(180deg, rgba(5, 46, 41, 0.92), rgba(11, 58, 53, 0.84));
+  border-color: rgba(45, 212, 191, 0.18);
+}
+
+.admin-parser-metric--primary {
+  background: linear-gradient(180deg, rgba(20, 44, 93, 0.92), rgba(24, 38, 82, 0.84));
+  border-color: rgba(96, 165, 250, 0.22);
+}
+
+.admin-parser-metric--warning {
+  background: linear-gradient(180deg, rgba(48, 33, 15, 0.92), rgba(38, 29, 19, 0.84));
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.admin-parser-metric--secondary {
+  background: linear-gradient(180deg, rgba(40, 25, 86, 0.92), rgba(33, 25, 73, 0.84));
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.admin-runtime-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #cbd5e1;
+}
+
+.admin-runtime-indicator span {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 14px currentColor;
+}
+
+.admin-runtime--running {
+  color: #2dd4bf;
+}
+
+.admin-runtime--warning {
+  color: #f59e0b;
+}
+
+.admin-runtime--idle {
+  color: #60a5fa;
+}
+
+.admin-runtime--stopped {
+  color: #f87171;
+}
+
+.admin-parser-card-footnote {
+  display: grid;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.admin-parser-progress {
+  padding: 26px 30px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(10, 27, 42, 0.92), rgba(8, 24, 37, 0.86));
+  border: 1px solid rgba(45, 212, 191, 0.12);
+  box-shadow: var(--shadow);
+}
+
+.admin-parser-progress__header,
+.admin-parser-progress__quota {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-parser-progress__header {
+  margin-bottom: 12px;
+}
+
+.admin-progress-bar {
+  position: relative;
+  height: 14px;
+  margin-bottom: 12px;
+  border-radius: 999px;
+  background: rgba(37, 61, 86, 0.92);
+  overflow: hidden;
+}
+
+.admin-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #14b8a6, #2dd4bf);
+}
+
+.admin-progress-bar--secondary span {
+  background: linear-gradient(90deg, #60a5fa, #38bdf8);
+}
+
+.admin-parser-progress__quota {
+  margin-top: 18px;
+  gap: 20px;
+}
+
+.admin-parser-progress__quota-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 200px;
+}
+
+.admin-parser-progress__quota-copy span {
+  color: var(--muted);
+}
+
+.admin-parser-progress__quota .admin-progress-bar {
+  flex: 1;
+  margin: 0;
+}
+
+.admin-parser-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  gap: 20px;
+}
+
+.admin-parser-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-parser-limit-button {
+  display: grid;
+  gap: 6px;
+  padding: 18px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background: rgba(10, 25, 40, 0.68);
+  color: inherit;
+  cursor: pointer;
+}
+
+.admin-parser-limit-button span,
+.admin-range-field span {
+  color: var(--muted);
+}
+
+.admin-parser-limit-button--active {
+  border-color: rgba(45, 212, 191, 0.7);
+  background: rgba(10, 67, 63, 0.5);
+}
+
+.admin-range-field {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.admin-range-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-range {
+  width: 100%;
+  accent-color: #2dd4bf;
+}
+
+.admin-parser-livebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(8, 23, 39, 0.62);
+  border: 1px solid rgba(45, 212, 191, 0.12);
+}
+
+.admin-card__header--tight {
+  margin-bottom: 12px;
+}
+
+.admin-parser-jobs {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-parser-terminal-card {
+  min-height: 100%;
+}
+
+.admin-terminal {
+  border-radius: 24px;
+  border: 1px solid rgba(30, 41, 59, 0.95);
+  background: linear-gradient(180deg, rgba(8, 20, 35, 0.98), rgba(6, 16, 27, 0.96));
+  overflow: hidden;
+}
+
+.admin-terminal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.82);
+  background: rgba(8, 19, 33, 0.94);
+}
+
+.admin-terminal__header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-terminal__body {
+  max-height: 540px;
+  overflow: auto;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.admin-terminal-line {
+  display: grid;
+  gap: 8px;
+  color: #dbeafe;
+}
+
+.admin-terminal-line__row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.admin-terminal-line__row p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.admin-terminal-line__time {
+  color: rgba(148, 163, 184, 0.7);
+  white-space: nowrap;
+}
+
+.admin-terminal-line__level {
+  color: #38bdf8;
+  white-space: nowrap;
+}
+
+.admin-terminal-line--warn .admin-terminal-line__level {
+  color: #fbbf24;
+}
+
+.admin-terminal-line--error .admin-terminal-line__level {
+  color: #f87171;
+}
+
+.admin-terminal-line__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: calc(110px + 12px);
+}
+
+.admin-terminal-line__meta span {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(191, 219, 254, 0.82);
+  font-size: 12px;
+}
+
+.search-panel__button--secondary {
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  color: #effffb;
+}
+
+@media (max-width: 1320px) {
+  .admin-parser-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-parser-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-parser__header,
+  .admin-parser-progress__header,
+  .admin-parser-progress__quota,
+  .admin-parser-livebar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-parser-metrics,
+  .admin-parser-limit-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-terminal__body {
+    max-height: 420px;
+  }
+
+  .admin-terminal-line__row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .admin-terminal-line__meta {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-parser-metrics,
+  .admin-parser-limit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-range-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bottom-nav {
   position: fixed;
   left: 50%;
