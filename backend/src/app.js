@@ -136,7 +136,15 @@ export function createApp() {
   });
 
   app.post("/admin/tracks", async (req, res) => {
-    const { title, artist, audio_url: audioUrl, cover } = req.body || {};
+    const {
+      title,
+      artist,
+      audio_url: audioUrl,
+      cover,
+      is_active: isActive,
+      catalog_artist_name: catalogArtistName,
+      genre_name: genreName,
+    } = req.body || {};
 
     if (!title || !artist || !audioUrl) {
       return res.status(400).json({
@@ -149,6 +157,11 @@ export function createApp() {
       artist: String(artist).trim(),
       audio_url: String(audioUrl).trim(),
       cover: cover ? String(cover).trim() : null,
+      is_active: isActive === undefined ? true : Boolean(isActive),
+      catalog_artist_name: catalogArtistName
+        ? String(catalogArtistName).trim()
+        : String(artist).trim(),
+      genre_name: genreName ? String(genreName).trim() : "",
     });
 
     return res.status(201).json(track);

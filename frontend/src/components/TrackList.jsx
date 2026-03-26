@@ -6,6 +6,18 @@ function getTrackKey(track) {
   return String(track.id || track.source_track_id || track.audio_url);
 }
 
+function WaveIndicator() {
+  return (
+    <span className="wave-indicator" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+      <span />
+      <span />
+    </span>
+  );
+}
+
 export function TrackList({
   tracks,
   activeTrackId,
@@ -13,17 +25,18 @@ export function TrackList({
   onToggleFavorite,
   favoriteTrackKeys,
   emptyMessage = "Ничего не найдено.",
+  showFavoriteAction = false,
 }) {
   if (!tracks.length) {
     return (
-      <div className="empty-state">
+      <div className="empty-state empty-state--flat">
         <p>{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className="track-list">
+    <div className="library-list">
       {tracks.map((track, index) => {
         const trackKey = getTrackKey(track);
         const isActive = track.id === activeTrackId || trackKey === activeTrackId;
@@ -32,10 +45,14 @@ export function TrackList({
         return (
           <article
             key={trackKey || `${track.title}-${index}`}
-            className={`track-card ${isActive ? "track-card--active" : ""}`}
+            className={`library-row ${isActive ? "library-row--active" : ""}`}
           >
-            <div className="track-card__meta">
-              <div className="track-card__cover" aria-hidden="true">
+            <button
+              className="library-row__main"
+              type="button"
+              onClick={() => onPlay(index)}
+            >
+              <div className="library-row__cover" aria-hidden="true">
                 {track.cover ? (
                   <img src={track.cover} alt="" />
                 ) : (
@@ -43,28 +60,30 @@ export function TrackList({
                 )}
               </div>
 
-              <div>
-                <h3 className="track-card__title">{track.title}</h3>
-                <p className="track-card__artist">{track.artist}</p>
+              <div className="library-row__copy">
+                <h3>{track.title}</h3>
+                <p>{track.artist}</p>
               </div>
-            </div>
+            </button>
 
-            <div className="track-card__actions">
-              {onToggleFavorite ? (
+            <div className="library-row__side">
+              {showFavoriteAction && onToggleFavorite ? (
                 <button
-                  className={`track-card__icon-button ${
-                    isFavorite ? "track-card__icon-button--active" : ""
+                  className={`library-row__favorite ${
+                    isFavorite ? "library-row__favorite--active" : ""
                   }`}
                   type="button"
                   onClick={() => onToggleFavorite(track)}
                 >
-                  ♥
+                  {isFavorite ? "♥" : "♡"}
                 </button>
-              ) : null}
-
-              <button className="track-card__button" type="button" onClick={() => onPlay(index)}>
-                {isActive ? "Играет" : "Play"}
-              </button>
+              ) : isActive ? (
+                <WaveIndicator />
+              ) : (
+                <span className="library-row__index">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+              )}
             </div>
           </article>
         );

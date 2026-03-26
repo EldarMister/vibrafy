@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "./components/BottomNav.jsx";
 import { Player } from "./components/Player.jsx";
 import { SearchBar } from "./components/SearchBar.jsx";
@@ -17,26 +17,42 @@ const STORAGE_KEYS = {
 
 const MAX_RECENT_TRACKS = 20;
 const DISCOVERY_QUERIES = ["MiyaGi", "Bakr", "Бек Борбиев"];
-const CARD_COLORS = ["#ffa37b", "#98e5a8", "#c7a0ff", "#f6a7d7", "#93d7ff", "#ffd975"];
+const DEFAULT_PLAYER_TRACK_INDEX = 2;
+const HAS_REMOTE_API = Boolean(import.meta.env.VITE_API_BASE_URL);
+const HOME_MODES = [
+  { id: "songs", label: "Песни" },
+  { id: "artists", label: "Исполнители" },
+  { id: "playlist", label: "Плейлисты" },
+  { id: "albums", label: "Альбомы" },
+  { id: "folder", label: "Папки" },
+];
+
+const DEFAULT_SHOWCASE_TRACKS = [
+  ["demo-1", "OnlyFans", "Isam Ft Koorosh", "vibrafy-onlyfans"],
+  ["demo-2", "Redbull", "Arta Ft Koorosh & Smokepurpp", "vibrafy-redbull"],
+  ["demo-3", "Nakhla", "Hidden & Khalse & Sijal", "vibrafy-nakhla"],
+  ["demo-4", "Baadpooli", "Hiphopologist x Kagan", "vibrafy-baadpooli"],
+  ["demo-5", "tttpttt", "Poori", "vibrafy-tttpttt"],
+  ["demo-6", "First Class", "Koorosh 420VII", "vibrafy-first-class"],
+  ["demo-7", "Faze Sekte", "CatchyBeats Ft 021KId", "vibrafy-faze-sekte"],
+  ["demo-8", "Ma", "Koorosh Ft Sami Low", "vibrafy-ma"],
+  ["demo-9", "Dobareh", "Gogoosh Ft Sogand & Leila Forohar", "vibrafy-dobareh"],
+  ["demo-10", "Inja Irane", "021KID Ft Putak", "vibrafy-inja-irane"],
+].map(([id, title, artist, seed], index) => ({
+  id,
+  title,
+  artist,
+  audio_url: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${index + 1}.mp3`,
+  cover: `https://picsum.photos/seed/${seed}/160/160`,
+}));
 
 function getTrackKey(track) {
-  if (!track) {
-    return "";
-  }
-
-  return String(
-    track.id ||
-      track.source_track_id ||
-      track.audio_url ||
-      `${track.title}-${track.artist}`,
-  );
+  if (!track) return "";
+  return String(track.id || track.source_track_id || track.audio_url || `${track.title}-${track.artist}`);
 }
 
 function readStoredJson(key, fallback) {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
+  if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
@@ -46,40 +62,23 @@ function readStoredJson(key, fallback) {
 }
 
 function writeStoredJson(key, value) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(key, JSON.stringify(value));
+  if (typeof window !== "undefined") window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 function readStoredText(key, fallback = "") {
-  if (typeof window === "undefined") {
-    return fallback;
-  }
-
+  if (typeof window === "undefined") return fallback;
   return window.localStorage.getItem(key) || fallback;
 }
 
 function writeStoredText(key, value) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(key, value);
+  if (typeof window !== "undefined") window.localStorage.setItem(key, value);
 }
 
 function uniqueTracks(tracks) {
   const map = new Map();
-
   for (const track of tracks) {
-    if (!track) {
-      continue;
-    }
-
-    map.set(getTrackKey(track), track);
+    if (track) map.set(getTrackKey(track), track);
   }
-
   return [...map.values()];
 }
 
@@ -92,38 +91,25 @@ function createPlaylistId() {
 }
 
 function splitArtistNames(artist) {
-  return artist
-    .split(/\s*(?:,|&|feat\.?|ft\.?|x|\/)\s*/i)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  return artist.split(/\s*(?:,|&|feat\.?|ft\.?|x|\/)\s*/i).map((item) => item.trim()).filter(Boolean);
 }
 
 function buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }) {
   const profile = new Map();
-
-  function addWeight(artistName, weight) {
+  const addWeight = (artistName, weight) => {
     const key = artistName.toLowerCase();
     profile.set(key, (profile.get(key) || 0) + weight);
-  }
+  };
 
-  favorites.forEach((track) => {
-    splitArtistNames(track.artist).forEach((artistName) => addWeight(artistName, 5));
-  });
-
+  favorites.forEach((track) => splitArtistNames(track.artist).forEach((name) => addWeight(name, 5)));
   recentTracks.forEach((track, index) => {
     const weight = Math.max(1, 4 - Math.floor(index / 3));
-    splitArtistNames(track.artist).forEach((artistName) => addWeight(artistName, weight));
+    splitArtistNames(track.artist).forEach((name) => addWeight(name, weight));
   });
-
   playlists.forEach((playlist) => {
-    playlist.tracks.forEach((track) => {
-      splitArtistNames(track.artist).forEach((artistName) => addWeight(artistName, 2));
-    });
+    playlist.tracks.forEach((track) => splitArtistNames(track.artist).forEach((name) => addWeight(name, 2)));
   });
-
-  if (currentTrack) {
-    splitArtistNames(currentTrack.artist).forEach((artistName) => addWeight(artistName, 3));
-  }
+  if (currentTrack) splitArtistNames(currentTrack.artist).forEach((name) => addWeight(name, 3));
 
   return profile;
 }
@@ -134,17 +120,10 @@ function buildArtistCards(tracks, tasteProfile) {
   tracks.forEach((track) => {
     splitArtistNames(track.artist).forEach((artistName) => {
       const key = artistName.toLowerCase();
-      const current = artists.get(key) || {
-        id: key,
-        name: artistName,
-        score: 0,
-        cover: track.cover || null,
-        tracks: [],
-      };
-
+      const current = artists.get(key) || { id: key, name: artistName, score: 0, cover: track.cover || null, tracks: [] };
       current.score += 1 + (tasteProfile.get(key) || 0);
       current.cover = current.cover || track.cover || null;
-      current.tracks = uniqueTracks([track, ...current.tracks]).slice(0, 5);
+      current.tracks = uniqueTracks([track, ...current.tracks]).slice(0, 8);
       artists.set(key, current);
     });
   });
@@ -152,64 +131,34 @@ function buildArtistCards(tracks, tasteProfile) {
   return [...artists.values()].sort((left, right) => right.score - left.score);
 }
 
-function scoreTrack(track, tasteProfile, favoriteTrackKeys, recentTrackKeys) {
-  const artistScore = splitArtistNames(track.artist).reduce(
-    (sum, artistName) => sum + (tasteProfile.get(artistName.toLowerCase()) || 0),
-    0,
-  );
-
-  return (
-    artistScore +
-    (favoriteTrackKeys.has(getTrackKey(track)) ? 8 : 0) +
-    (recentTrackKeys.has(getTrackKey(track)) ? 4 : 0)
-  );
-}
-
 function buildTrackRanking(tracks, tasteProfile, favoriteTrackKeys, recentTrackKeys) {
-  return [...tracks].sort(
-    (left, right) =>
-      scoreTrack(right, tasteProfile, favoriteTrackKeys, recentTrackKeys) -
-      scoreTrack(left, tasteProfile, favoriteTrackKeys, recentTrackKeys),
-  );
-}
+  const scoreTrack = (track) => {
+    const artistScore = splitArtistNames(track.artist).reduce(
+      (sum, artistName) => sum + (tasteProfile.get(artistName.toLowerCase()) || 0),
+      0,
+    );
+    return artistScore + (favoriteTrackKeys.has(getTrackKey(track)) ? 8 : 0) + (recentTrackKeys.has(getTrackKey(track)) ? 4 : 0);
+  };
 
-function buildStationCards(artists, rankedTracks) {
-  return artists.slice(0, 6).map((artist, index) => {
-    const relatedTracks = artist.tracks.length > 0 ? artist.tracks : rankedTracks.slice(0, 3);
-
-    return {
-      id: artist.id,
-      title: artist.name,
-      subtitle: relatedTracks
-        .slice(0, 3)
-        .map((track) => track.artist)
-        .join(", "),
-      covers: relatedTracks.slice(0, 3).map((track) => track.cover).filter(Boolean),
-      color: CARD_COLORS[index % CARD_COLORS.length],
-      tracks: relatedTracks,
-    };
-  });
+  return [...tracks].sort((left, right) => scoreTrack(right) - scoreTrack(left));
 }
 
 function buildMixCards(playlists, rankedTracks) {
-  const playlistCards = playlists.slice(0, 3).map((playlist, index) => ({
+  const playlistCards = playlists.slice(0, 6).map((playlist) => ({
     id: playlist.id,
     title: playlist.name,
-    subtitle:
-      playlist.tracks.slice(0, 3).map((track) => track.artist).join(", ") || "Добавьте треки",
-    color: CARD_COLORS[(index + 2) % CARD_COLORS.length],
+    subtitle: playlist.tracks.slice(0, 3).map((track) => track.artist).join(", ") || "Пустой плейлист",
+    cover: playlist.tracks[0]?.cover || null,
     tracks: playlist.tracks,
   }));
 
-  if (playlistCards.length > 0) {
-    return playlistCards;
-  }
+  if (playlistCards.length > 0) return playlistCards;
 
-  return rankedTracks.slice(0, 3).map((track, index) => ({
+  return rankedTracks.slice(0, 6).map((track) => ({
     id: `mix-${getTrackKey(track)}`,
-    title: `${track.title} Mix`,
+    title: `Микс: ${track.title}`,
     subtitle: track.artist,
-    color: CARD_COLORS[(index + 3) % CARD_COLORS.length],
+    cover: track.cover || null,
     tracks: rankedTracks.filter((item) =>
       splitArtistNames(item.artist).some((artistName) =>
         splitArtistNames(track.artist).includes(artistName),
@@ -218,62 +167,91 @@ function buildMixCards(playlists, rankedTracks) {
   }));
 }
 
-function MiniHeader({ title, subtitle, actionLabel, onAction }) {
-  return (
-    <header className="mobile-header">
-      <div>
-        <p className="mobile-header__eyebrow">{subtitle}</p>
-        <h1>{title}</h1>
-      </div>
+function MenuIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14v1.8H5zM5 11.1h9.8v1.8H5zM5 15.2h14v1.8H5z" fill="currentColor" /></svg>;
+}
 
-      {onAction ? (
-        <button className="mobile-header__button" type="button" onClick={onAction}>
-          {actionLabel}
-        </button>
-      ) : null}
-    </header>
+function SearchIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="5.4" stroke="currentColor" strokeWidth="1.8" fill="none" /><path d="m15.2 15.2 3.8 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
+}
+
+function ShuffleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4.5 7.5h3.1c1.7 0 2.6.4 3.6 1.5l5.5 6c.5.5 1 .8 1.9.8h1.9M20 7v4h-4M4.5 16.5h3.1c1.2 0 1.8-.2 2.5-.9l1.5-1.5M20 13v4h-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
   );
 }
 
-function Section({ title, actionLabel, onAction, children }) {
+function QueueIcon() {
   return (
-    <section className="section-block">
-      <div className="section-block__header">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 7.5h9.5M5 12h9.5M5 16.5h9.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="18.2" cy="12" r="2.4" stroke="currentColor" strokeWidth="1.8" fill="none" />
+      <path d="M18.2 8.5v2.1M18.2 13.4v2.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ScreenButton({ children, onClick, label }) {
+  return <button className="screen-icon-button" type="button" onClick={onClick} aria-label={label}>{children}</button>;
+}
+
+function ScreenSection({ title, actionLabel, onAction, children }) {
+  return (
+    <section className="collection-section">
+      <div className="collection-section__header">
         <h2>{title}</h2>
-        {actionLabel && onAction ? (
-          <button type="button" onClick={onAction}>
-            {actionLabel}
-          </button>
-        ) : null}
+        {actionLabel && onAction ? <button type="button" onClick={onAction}>{actionLabel}</button> : null}
       </div>
       {children}
     </section>
   );
 }
 
+function EntityList({ items, onSelect, emptyMessage }) {
+  if (!items.length) {
+    return <div className="empty-state empty-state--flat"><p>{emptyMessage}</p></div>;
+  }
+
+  return (
+    <div className="entity-list">
+      {items.map((item) => (
+        <button key={item.id} className="entity-list__row" type="button" onClick={() => onSelect(item)}>
+          <div className="entity-list__cover" aria-hidden="true">
+            {item.cover ? <img src={item.cover} alt="" /> : <span>{item.title[0]}</span>}
+          </div>
+          <div className="entity-list__copy">
+            <strong>{item.title}</strong>
+            <p>{item.subtitle}</p>
+          </div>
+          <span className="entity-list__arrow">›</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ClientApp() {
   const telegram = useTelegram();
   const audioRef = useRef(null);
-
+  const playbackIntentRef = useRef(false);
   const [activeTab, setActiveTab] = useState("home");
-  const [homeFilter, setHomeFilter] = useState("all");
+  const [homeMode, setHomeMode] = useState("songs");
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState(() => readStoredText(STORAGE_KEYS.query, ""));
   const [tracks, setTracks] = useState(() => readStoredJson(STORAGE_KEYS.tracks, []));
-  const [favorites, setFavorites] = useState(() =>
-    readStoredJson(STORAGE_KEYS.favorites, []),
-  );
-  const [recentTracks, setRecentTracks] = useState(() =>
-    readStoredJson(STORAGE_KEYS.recent, []),
-  );
-  const [playlists, setPlaylists] = useState(() =>
-    readStoredJson(STORAGE_KEYS.playlists, []),
-  );
-  const [discoveryTracks, setDiscoveryTracks] = useState(() =>
-    readStoredJson(STORAGE_KEYS.discovery, []),
-  );
+  const [favorites, setFavorites] = useState(() => readStoredJson(STORAGE_KEYS.favorites, []));
+  const [recentTracks, setRecentTracks] = useState(() => readStoredJson(STORAGE_KEYS.recent, []));
+  const [playlists, setPlaylists] = useState(() => readStoredJson(STORAGE_KEYS.playlists, []));
+  const [discoveryTracks, setDiscoveryTracks] = useState(() => {
+    const storedDiscovery = readStoredJson(STORAGE_KEYS.discovery, []);
+    return storedDiscovery.length > 0 ? storedDiscovery : DEFAULT_SHOWCASE_TRACKS;
+  });
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
-  const [queue, setQueue] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [queue, setQueue] = useState(DEFAULT_SHOWCASE_TRACKS);
+  const [currentIndex, setCurrentIndex] = useState(DEFAULT_PLAYER_TRACK_INDEX);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -283,183 +261,81 @@ export function ClientApp() {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
   const [selectedTrackKey, setSelectedTrackKey] = useState("");
 
-  const currentTrack =
-    currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
+  const currentTrack = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
   const allKnownTracks = useMemo(
-    () =>
-      uniqueTracks([
-        ...tracks,
-        ...favorites,
-        ...recentTracks,
-        ...playlists.flatMap((playlist) => playlist.tracks),
-        ...discoveryTracks,
-        currentTrack,
-      ]),
+    () => uniqueTracks([...tracks, ...favorites, ...recentTracks, ...playlists.flatMap((playlist) => playlist.tracks), ...discoveryTracks, currentTrack]),
     [tracks, favorites, recentTracks, playlists, discoveryTracks, currentTrack],
   );
-  const favoriteTrackKeys = useMemo(
-    () => new Set(favorites.map((track) => getTrackKey(track))),
-    [favorites],
+  const favoriteTrackKeys = useMemo(() => new Set(favorites.map((track) => getTrackKey(track))), [favorites]);
+  const recentTrackKeys = useMemo(() => new Set(recentTracks.map((track) => getTrackKey(track))), [recentTracks]);
+  const tasteProfile = useMemo(() => buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }), [recentTracks, favorites, playlists, currentTrack]);
+  const artistCards = useMemo(() => buildArtistCards(allKnownTracks, tasteProfile), [allKnownTracks, tasteProfile]);
+  const rankedTracks = useMemo(() => buildTrackRanking(allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys), [allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys]);
+  const mixCards = useMemo(() => buildMixCards(playlists, rankedTracks), [playlists, rankedTracks]);
+  const homeTracks = useMemo(() => (tracks.length > 0 ? tracks : rankedTracks.length > 0 ? rankedTracks : discoveryTracks), [tracks, rankedTracks, discoveryTracks]);
+  const folderCards = useMemo(
+    () => [
+      { id: "folder-recent", title: "Недавние", subtitle: `${recentTracks.length} треков`, cover: recentTracks[0]?.cover || null },
+      { id: "folder-favorites", title: "Избранное", subtitle: `${favorites.length} треков`, cover: favorites[0]?.cover || null },
+      { id: "folder-library", title: "Каталог", subtitle: `${homeTracks.length} треков`, cover: homeTracks[0]?.cover || null },
+    ],
+    [recentTracks, favorites, homeTracks],
   );
-  const recentTrackKeys = useMemo(
-    () => new Set(recentTracks.map((track) => getTrackKey(track))),
-    [recentTracks],
-  );
-  const tasteProfile = useMemo(
-    () => buildTasteProfile({ recentTracks, favorites, playlists, currentTrack }),
-    [recentTracks, favorites, playlists, currentTrack],
-  );
-  const artistCards = useMemo(
-    () => buildArtistCards(allKnownTracks, tasteProfile),
-    [allKnownTracks, tasteProfile],
-  );
-  const rankedTracks = useMemo(
-    () => buildTrackRanking(allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys),
-    [allKnownTracks, tasteProfile, favoriteTrackKeys, recentTrackKeys],
-  );
-  const recommendedStations = useMemo(
-    () => buildStationCards(artistCards, rankedTracks),
-    [artistCards, rankedTracks],
-  );
-  const mixCards = useMemo(
-    () => buildMixCards(playlists, rankedTracks),
-    [playlists, rankedTracks],
-  );
-  const featuredItems = useMemo(() => {
-    const popularArtists = artistCards.slice(0, 2).map((artist, index) => ({
-      id: `artist-${artist.id}`,
-      type: "artist",
-      title: artist.name,
-      subtitle: `${artist.tracks.length} треков в подборке`,
-      cover: artist.cover,
-      queryValue: artist.name,
-      color: CARD_COLORS[index % CARD_COLORS.length],
-    }));
-    const popularTracks = rankedTracks.slice(0, 2).map((track, index) => ({
-      id: `track-${getTrackKey(track)}`,
-      type: "track",
-      title: track.title,
-      subtitle: track.artist,
-      cover: track.cover,
-      track,
-      color: CARD_COLORS[(index + 3) % CARD_COLORS.length],
-    }));
 
-    return [...popularArtists, ...popularTracks].slice(0, 4);
-  }, [artistCards, rankedTracks]);
-
+  useEffect(() => writeStoredText(STORAGE_KEYS.query, query), [query]);
+  useEffect(() => writeStoredJson(STORAGE_KEYS.tracks, tracks), [tracks]);
+  useEffect(() => writeStoredJson(STORAGE_KEYS.favorites, favorites), [favorites]);
+  useEffect(() => writeStoredJson(STORAGE_KEYS.recent, recentTracks), [recentTracks]);
+  useEffect(() => writeStoredJson(STORAGE_KEYS.playlists, playlists), [playlists]);
+  useEffect(() => writeStoredJson(STORAGE_KEYS.discovery, discoveryTracks), [discoveryTracks]);
   useEffect(() => {
-    writeStoredText(STORAGE_KEYS.query, query);
-  }, [query]);
-
-  useEffect(() => {
-    writeStoredJson(STORAGE_KEYS.tracks, tracks);
-  }, [tracks]);
-
-  useEffect(() => {
-    writeStoredJson(STORAGE_KEYS.favorites, favorites);
-  }, [favorites]);
-
-  useEffect(() => {
-    writeStoredJson(STORAGE_KEYS.recent, recentTracks);
-  }, [recentTracks]);
-
-  useEffect(() => {
-    writeStoredJson(STORAGE_KEYS.playlists, playlists);
-  }, [playlists]);
-
-  useEffect(() => {
-    writeStoredJson(STORAGE_KEYS.discovery, discoveryTracks);
+    if (!HAS_REMOTE_API && discoveryTracks.length === 0) setDiscoveryTracks(DEFAULT_SHOWCASE_TRACKS);
   }, [discoveryTracks]);
-
   useEffect(() => {
-    if (!selectedPlaylistId && playlists.length > 0) {
-      setSelectedPlaylistId(playlists[0].id);
-    }
-
-    if (playlists.every((playlist) => playlist.id !== selectedPlaylistId)) {
-      setSelectedPlaylistId(playlists[0]?.id || "");
-    }
+    if (!selectedPlaylistId && playlists.length > 0) setSelectedPlaylistId(playlists[0].id);
+    if (playlists.every((playlist) => playlist.id !== selectedPlaylistId)) setSelectedPlaylistId(playlists[0]?.id || "");
   }, [playlists, selectedPlaylistId]);
-
   useEffect(() => {
-    if (!selectedTrackKey && allKnownTracks.length > 0) {
-      setSelectedTrackKey(getTrackKey(allKnownTracks[0]));
-    }
-
-    if (allKnownTracks.every((track) => getTrackKey(track) !== selectedTrackKey)) {
-      setSelectedTrackKey(allKnownTracks[0] ? getTrackKey(allKnownTracks[0]) : "");
-    }
+    if (!selectedTrackKey && allKnownTracks.length > 0) setSelectedTrackKey(getTrackKey(allKnownTracks[0]));
+    if (allKnownTracks.every((track) => getTrackKey(track) !== selectedTrackKey)) setSelectedTrackKey(allKnownTracks[0] ? getTrackKey(allKnownTracks[0]) : "");
   }, [allKnownTracks, selectedTrackKey]);
 
   useEffect(() => {
-    if (!telegram) {
-      return;
-    }
-
+    if (!telegram) return;
     telegram.ready();
     telegram.expand();
-
     const theme = telegram.themeParams;
-
-    if (theme.bg_color) {
-      document.documentElement.style.setProperty("--tg-bg", theme.bg_color);
-    }
-
-    if (theme.text_color) {
-      document.documentElement.style.setProperty("--tg-text", theme.text_color);
-    }
+    if (theme.bg_color) document.documentElement.style.setProperty("--tg-bg", theme.bg_color);
+    if (theme.text_color) document.documentElement.style.setProperty("--tg-text", theme.text_color);
   }, [telegram]);
 
   useEffect(() => {
     const user = telegram?.initDataUnsafe?.user;
-
-    if (!user?.id) {
-      return;
-    }
-
+    if (!HAS_REMOTE_API || !user?.id) return;
     apiRequest("/users/seen", {
       method: "POST",
       body: JSON.stringify({ user }),
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     }).catch(() => {});
   }, [telegram]);
 
   useEffect(() => {
-    if (discoveryTracks.length > 0 || discoveryLoading) {
-      return;
-    }
-
+    if (!HAS_REMOTE_API || discoveryTracks.length > 0 || discoveryLoading) return;
     let isCancelled = false;
 
     async function loadDiscovery() {
       setDiscoveryLoading(true);
-
       try {
-        const batches = await Promise.all(
-          DISCOVERY_QUERIES.map((discoveryQuery) =>
-            apiRequest(`/search?q=${encodeURIComponent(discoveryQuery)}`),
-          ),
-        );
-
-        if (!isCancelled) {
-          setDiscoveryTracks(uniqueTracks(batches.flatMap((result) => result.slice(0, 4))));
-        }
+        const batches = await Promise.all(DISCOVERY_QUERIES.map((discoveryQuery) => apiRequest(`/search?q=${encodeURIComponent(discoveryQuery)}`)));
+        if (!isCancelled) setDiscoveryTracks(uniqueTracks(batches.flatMap((result) => result.slice(0, 6))));
       } catch {
-        if (!isCancelled) {
-          setDiscoveryTracks([]);
-        }
+        if (!isCancelled) setDiscoveryTracks(DEFAULT_SHOWCASE_TRACKS);
       } finally {
-        if (!isCancelled) {
-          setDiscoveryLoading(false);
-        }
+        if (!isCancelled) setDiscoveryLoading(false);
       }
     }
 
     loadDiscovery();
-
     return () => {
       isCancelled = true;
     };
@@ -467,10 +343,7 @@ export function ClientApp() {
 
   useEffect(() => {
     const audio = audioRef.current;
-
-    if (!audio) {
-      return undefined;
-    }
+    if (!audio) return undefined;
 
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleLoadedMetadata = () => setDuration(audio.duration);
@@ -478,10 +351,10 @@ export function ClientApp() {
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
       if (currentIndex < queue.length - 1) {
+        playbackIntentRef.current = true;
         setCurrentIndex((value) => value + 1);
         return;
       }
-
       setIsPlaying(false);
     };
 
@@ -502,680 +375,278 @@ export function ClientApp() {
 
   useEffect(() => {
     const audio = audioRef.current;
-
-    if (!audio || !currentTrack) {
-      return;
-    }
+    if (!audio || !currentTrack) return;
 
     audio.src = currentTrack.audio_url;
     audio.load();
     setCurrentTime(0);
     setRecentTracks((value) => upsertRecentTrack(value, currentTrack));
 
-    audio
-      .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
+    if (!playbackIntentRef.current) {
+      setIsPlaying(false);
+      return;
+    }
+
+    audio.play().then(() => {
+      setIsPlaying(true);
+      playbackIntentRef.current = false;
+    }).catch(() => {
+      setIsPlaying(false);
+      playbackIntentRef.current = false;
+    });
   }, [currentTrack]);
 
   async function runSearch(searchValue) {
     const normalizedQuery = searchValue.trim();
-
-    if (!normalizedQuery) {
-      return;
-    }
+    if (!normalizedQuery) return;
 
     setQuery(normalizedQuery);
-    setActiveTab("tracks");
+    setActiveTab("home");
+    setHomeMode("songs");
     setIsLoading(true);
     setError("");
 
-    try {
-      const data = await apiRequest(
-        `/search?q=${encodeURIComponent(normalizedQuery)}`,
-      );
-      setTracks(data);
-    } catch (requestError) {
-      const message =
-        requestError instanceof Error
-          ? requestError.message
-          : "Ошибка при выполнении поиска";
+    if (!HAS_REMOTE_API) {
+      const loweredQuery = normalizedQuery.toLowerCase();
+      const localCatalog = uniqueTracks([...allKnownTracks, ...DEFAULT_SHOWCASE_TRACKS]);
+      setTracks(localCatalog.filter((track) => `${track.title} ${track.artist}`.toLowerCase().includes(loweredQuery)));
+      setSearchOpen(false);
+      setIsLoading(false);
+      return;
+    }
 
+    try {
+      setTracks(await apiRequest(`/search?q=${encodeURIComponent(normalizedQuery)}`));
+      setSearchOpen(false);
+    } catch (requestError) {
       setTracks([]);
-      setError(message);
+      setError(requestError instanceof Error ? requestError.message : "Не удалось выполнить поиск");
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function handleSearch(event) {
+  const handleSearch = async (event) => {
     event.preventDefault();
     await runSearch(query);
-  }
+  };
 
-  function playTrackFromCollection(collection, index) {
-    if (!collection.length) {
-      return;
-    }
-
+  const playTrackFromCollection = (collection, index) => {
+    if (!collection.length) return;
+    playbackIntentRef.current = true;
     setQueue(collection);
     setCurrentIndex(index);
-  }
+  };
 
-  function playTrackImmediately(track) {
-    playTrackFromCollection([track], 0);
-  }
-
-  function runArtistCard(artistName) {
-    void runSearch(artistName);
-  }
-
-  function handleFeaturedItemClick(item) {
-    if (item.type === "artist") {
-      runArtistCard(item.queryValue);
-      return;
-    }
-
-    if (item.track) {
-      playTrackImmediately(item.track);
-    }
-  }
-
-  function handleTogglePlay() {
+  const handleTogglePlay = () => {
     const audio = audioRef.current;
-
-    if (!audio) {
+    if (!audio) return;
+    if (!currentTrack && homeTracks.length > 0) {
+      playTrackFromCollection(homeTracks, 0);
       return;
     }
-
-    if (!currentTrack && rankedTracks.length > 0) {
-      playTrackFromCollection(rankedTracks, 0);
-      return;
-    }
-
     if (audio.paused) {
       audio.play();
       return;
     }
-
     audio.pause();
-  }
+  };
 
-  function handleSeek(nextProgress) {
-    const audio = audioRef.current;
-
-    if (!audio || !duration) {
-      return;
-    }
-
-    audio.currentTime = (nextProgress / 100) * duration;
-    setCurrentTime(audio.currentTime);
-  }
-
-  function handlePrev() {
+  const handlePrev = () => {
+    playbackIntentRef.current = true;
     setCurrentIndex((value) => Math.max(value - 1, 0));
-  }
+  };
 
-  function handleNext() {
+  const handleNext = () => {
+    playbackIntentRef.current = true;
     setCurrentIndex((value) => Math.min(value + 1, queue.length - 1));
-  }
+  };
 
-  function toggleFavorite(track) {
+  const handleShufflePlay = () => {
+    if (!homeTracks.length) return;
+    playTrackFromCollection(homeTracks, Math.floor(Math.random() * homeTracks.length));
+  };
+
+  const toggleFavorite = (track) => {
     const trackKey = getTrackKey(track);
+    setFavorites((value) => (value.some((item) => getTrackKey(item) === trackKey) ? value.filter((item) => getTrackKey(item) !== trackKey) : uniqueTracks([track, ...value])));
+  };
 
-    setFavorites((value) => {
-      if (value.some((item) => getTrackKey(item) === trackKey)) {
-        return value.filter((item) => getTrackKey(item) !== trackKey);
-      }
-
-      return uniqueTracks([track, ...value]);
-    });
-  }
-
-  function handleCreatePlaylist(event) {
+  const handleCreatePlaylist = (event) => {
     event.preventDefault();
-
     const name = newPlaylistName.trim();
-
-    if (!name) {
-      return;
-    }
-
-    setPlaylists((value) => [
-      {
-        id: createPlaylistId(),
-        name,
-        tracks: [],
-      },
-      ...value,
-    ]);
+    if (!name) return;
+    setPlaylists((value) => [{ id: createPlaylistId(), name, tracks: [] }, ...value]);
     setNewPlaylistName("");
-    setActiveTab("playlists");
-  }
+  };
 
-  function addTrackToPlaylist(playlistId, track) {
-    setPlaylists((value) =>
-      value.map((playlist) => {
-        if (playlist.id !== playlistId) {
-          return playlist;
-        }
+  const addTrackToPlaylist = (playlistId, track) => {
+    setPlaylists((value) => value.map((playlist) => (playlist.id !== playlistId ? playlist : { ...playlist, tracks: uniqueTracks([track, ...playlist.tracks]) })));
+  };
 
-        return {
-          ...playlist,
-          tracks: uniqueTracks([track, ...playlist.tracks]),
-        };
-      }),
-    );
-  }
+  const removeTrackFromPlaylist = (playlistId, trackKey) => {
+    setPlaylists((value) => value.map((playlist) => (playlist.id !== playlistId ? playlist : { ...playlist, tracks: playlist.tracks.filter((track) => getTrackKey(track) !== trackKey) })));
+  };
 
-  function removeTrackFromPlaylist(playlistId, trackKey) {
-    setPlaylists((value) =>
-      value.map((playlist) => {
-        if (playlist.id !== playlistId) {
-          return playlist;
-        }
+  const removePlaylist = (playlistId) => setPlaylists((value) => value.filter((playlist) => playlist.id !== playlistId));
 
-        return {
-          ...playlist,
-          tracks: playlist.tracks.filter(
-            (track) => getTrackKey(track) !== trackKey,
-          ),
-        };
-      }),
-    );
-  }
-
-  function removePlaylist(playlistId) {
-    setPlaylists((value) => value.filter((playlist) => playlist.id !== playlistId));
-  }
-
-  function handleQuickAddTrack(event) {
+  const handleQuickAddTrack = (event) => {
     event.preventDefault();
+    const track = allKnownTracks.find((item) => getTrackKey(item) === selectedTrackKey);
+    if (track && selectedPlaylistId) addTrackToPlaylist(selectedPlaylistId, track);
+  };
 
-    const track = allKnownTracks.find(
-      (item) => getTrackKey(item) === selectedTrackKey,
-    );
-
-    if (!track || !selectedPlaylistId) {
+  const handleSelectArtist = (item) => void runSearch(item.title);
+  const handleSelectMix = (item) => playTrackFromCollection(item.tracks || [], 0);
+  const handleSelectFolder = (item) => {
+    if (item.id === "folder-library") {
+      setHomeMode("songs");
+      setActiveTab("home");
       return;
     }
+    setActiveTab("mine");
+  };
 
-    addTrackToPlaylist(selectedPlaylistId, track);
-  }
+  const renderDrawer = () => drawerOpen ? (
+    <div className="screen-drawer-backdrop" role="presentation" onClick={() => setDrawerOpen(false)}>
+      <aside className="screen-drawer" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <p className="screen-drawer__eyebrow">Меню</p>
+        <button type="button" onClick={() => { setActiveTab("home"); setDrawerOpen(false); }}>Главная</button>
+        <button type="button" onClick={() => { setActiveTab("mine"); setDrawerOpen(false); }}>Мое</button>
+        <button type="button" onClick={() => { setActiveTab("playlists"); setDrawerOpen(false); }}>Плейлисты</button>
+      </aside>
+    </div>
+  ) : null;
 
-  function renderStationScroller(items, onPick) {
-    if (!items.length) {
-      return (
-        <div className="empty-state">
-          <p>Пока не хватает данных. Послушайте несколько треков, и подборка станет точнее.</p>
-        </div>
-      );
+  const renderHomeContent = () => {
+    if (homeMode === "artists") {
+      return <EntityList items={artistCards.slice(0, 20).map((artist) => ({ id: artist.id, title: artist.name, subtitle: `${artist.tracks.length} треков в каталоге`, cover: artist.cover, tracks: artist.tracks }))} onSelect={handleSelectArtist} emptyMessage={discoveryLoading ? "Загружаю исполнителей..." : "Исполнители появятся после первой загрузки каталога."} />;
     }
-
-    return (
-      <div className="station-scroller">
-        {items.map((item, index) => (
-          <button
-            key={item.id}
-            className="station-card"
-            type="button"
-            style={{ background: item.color || CARD_COLORS[index % CARD_COLORS.length] }}
-            onClick={() => onPick(item)}
-          >
-            <div className="station-card__badge">РАДИО</div>
-            <div className="station-card__covers">
-              {(item.covers || item.tracks?.map((track) => track.cover) || [])
-                .filter(Boolean)
-                .slice(0, 3)
-                .map((cover, coverIndex) => (
-                  <span
-                    key={`${item.id}-${coverIndex}`}
-                    className={`station-card__cover station-card__cover--${coverIndex}`}
-                  >
-                    <img src={cover} alt="" />
-                  </span>
-                ))}
-            </div>
-            <strong>{item.title}</strong>
-            <p>{item.subtitle}</p>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  function renderArtistsGrid() {
-    if (!artistCards.length) {
-      return (
-        <div className="empty-state">
-          <p>
-            {discoveryLoading
-              ? "Загружаем популярных исполнителей..."
-              : "Исполнители появятся после первых данных."}
-          </p>
-        </div>
-      );
+    if (homeMode === "playlist") {
+      return <EntityList items={mixCards} onSelect={handleSelectMix} emptyMessage="Создай плейлисты или послушай больше музыки." />;
     }
+    if (homeMode === "albums") {
+      return <EntityList items={mixCards.slice(0, 10)} onSelect={handleSelectMix} emptyMessage="Альбомы и миксы появятся здесь." />;
+    }
+    if (homeMode === "folder") {
+      return <EntityList items={folderCards} onSelect={handleSelectFolder} emptyMessage="Здесь появятся твои подборки." />;
+    }
+    return <TrackList tracks={homeTracks} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(homeTracks, index)} favoriteTrackKeys={favoriteTrackKeys} emptyMessage={isLoading ? "Загружаю треки..." : query ? "По этому запросу ничего не найдено." : "Популярные треки появятся после импорта."} />;
+  };
 
-    return (
-      <div className="artist-grid">
-        {artistCards.slice(0, 6).map((artist, index) => (
-          <button
-            key={artist.id}
-            className="artist-card"
-            type="button"
-            style={{ background: CARD_COLORS[(index + 1) % CARD_COLORS.length] }}
-            onClick={() => runArtistCard(artist.name)}
-          >
-            <div className="artist-card__avatar">
-              {artist.cover ? <img src={artist.cover} alt="" /> : <span>{artist.name[0]}</span>}
-            </div>
-            <strong>{artist.name}</strong>
-            <p>{artist.tracks.length} треков</p>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  function renderHomeTab() {
-    const showAll = homeFilter === "all";
-    const showMusic = homeFilter === "music";
-    const showForYou = homeFilter === "for-you";
-
-    return (
-      <section className="phone-shell">
-        <MiniHeader title="Vibrafy" subtitle="Главная" />
-
-        <div className="home-filter-bar">
-          <button
-            type="button"
-            className={`home-filter-bar__item ${
-              homeFilter === "for-you" ? "home-filter-bar__item--active" : ""
-            }`}
-            onClick={() => setHomeFilter("for-you")}
-          >
-            Для тебя
-          </button>
-          <button
-            type="button"
-            className={`home-filter-bar__item ${
-              homeFilter === "all" ? "home-filter-bar__item--active" : ""
-            }`}
-            onClick={() => setHomeFilter("all")}
-          >
-            Все
-          </button>
-          <button
-            type="button"
-            className={`home-filter-bar__item ${
-              homeFilter === "music" ? "home-filter-bar__item--active" : ""
-            }`}
-            onClick={() => setHomeFilter("music")}
-          >
-            Музыка
-          </button>
+  const renderHomeTab = () => (
+    <section className="player-screen">
+      <header className="player-screen__header">
+        <div className="player-screen__leading">
+          <ScreenButton label="Меню" onClick={() => setDrawerOpen(true)}><MenuIcon /></ScreenButton>
+          <h1>Музыка</h1>
         </div>
+        <ScreenButton label="Поиск" onClick={() => setSearchOpen((value) => !value)}><SearchIcon /></ScreenButton>
+      </header>
 
-        <div className="featured-grid">
-          {featuredItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="featured-card"
-              style={{ background: item.color }}
-              onClick={() => handleFeaturedItemClick(item)}
-            >
-              <div className="featured-card__cover">
-                {item.cover ? <img src={item.cover} alt="" /> : <span>{item.title[0]}</span>}
-              </div>
-              <div>
-                <strong>{item.title}</strong>
-                <p>{item.subtitle}</p>
-              </div>
+      {searchOpen ? <SearchBar value={query} onChange={setQuery} onSubmit={handleSearch} isLoading={isLoading} onClose={() => setSearchOpen(false)} /> : null}
+
+      <div className="library-toolbar">
+        <div className="library-toolbar__tabs">
+          {HOME_MODES.map((mode) => (
+            <button key={mode.id} type="button" className={`library-toolbar__tab ${homeMode === mode.id ? "library-toolbar__tab--active" : ""}`} onClick={() => setHomeMode(mode.id)}>
+              {mode.label}
             </button>
           ))}
         </div>
-
-        {(showAll || showForYou) && (
-          <Section title="Рекомендуемые станции">
-            {renderStationScroller(recommendedStations, (station) =>
-              playTrackFromCollection(station.tracks, 0),
-            )}
-          </Section>
-        )}
-
-        {(showAll || showMusic) && (
-          <Section title="Популярные треки" actionLabel="Треки" onAction={() => setActiveTab("tracks")}>
-            <TrackList
-              tracks={rankedTracks.slice(0, 6)}
-              activeTrackId={getTrackKey(currentTrack)}
-              onPlay={(index) => playTrackFromCollection(rankedTracks.slice(0, 6), index)}
-              onToggleFavorite={toggleFavorite}
-              favoriteTrackKeys={favoriteTrackKeys}
-              emptyMessage={
-                discoveryLoading
-                  ? "Загружаем популярные треки..."
-                  : "Треки появятся, как только библиотека наполнится."
-              }
-            />
-          </Section>
-        )}
-
-        {(showAll || showForYou) && (
-          <Section title="Популярные исполнители" actionLabel="Треки" onAction={() => setActiveTab("tracks")}>
-            {renderArtistsGrid()}
-          </Section>
-        )}
-
-        {(showAll || showForYou) && (
-          <Section title="Твои лучшие миксы">
-            {renderStationScroller(mixCards, (mix) =>
-              playTrackFromCollection(mix.tracks, 0),
-            )}
-          </Section>
-        )}
-      </section>
-    );
-  }
-
-  function renderTracksTab() {
-    const trackFeed = tracks.length > 0 ? tracks : rankedTracks;
-
-    return (
-      <section className="phone-shell">
-        <MiniHeader
-          title="Music Player"
-          subtitle="Треки"
-          actionLabel="Главная"
-          onAction={() => setActiveTab("home")}
-        />
-
-        <div className="top-filter-bar">
-          <button type="button" className="top-filter-bar__item top-filter-bar__item--active">
-            Songs
-          </button>
-          <button type="button" className="top-filter-bar__item">
-            Artists
-          </button>
-          <button type="button" className="top-filter-bar__item">
-            Playlist
-          </button>
-          <button type="button" className="top-filter-bar__item">
-            Albums
-          </button>
+        <div className="library-toolbar__actions">
+          <ScreenButton label="Перемешать" onClick={handleShufflePlay}><ShuffleIcon /></ScreenButton>
+          <ScreenButton label="Моя музыка" onClick={() => setActiveTab("mine")}><QueueIcon /></ScreenButton>
         </div>
+      </div>
 
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          onSubmit={handleSearch}
-          isLoading={isLoading}
-        />
+      {error ? <div className="inline-error">{error}</div> : null}
+      <div className="player-screen__content">{renderHomeContent()}</div>
+    </section>
+  );
 
-        {error ? <div className="error-box">{error}</div> : null}
+  const renderMineTab = () => (
+    <section className="stack-screen">
+      <header className="stack-screen__header">
+        <button type="button" onClick={() => setActiveTab("home")}>Назад</button>
+        <h1>Мое</h1>
+        <button type="button" onClick={() => setActiveTab("playlists")}>Плейлисты</button>
+      </header>
+      <ScreenSection title="Недавно слушал">
+        <TrackList tracks={recentTracks} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(recentTracks, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="История прослушивания пока пуста." />
+      </ScreenSection>
+      <ScreenSection title="Избранные треки">
+        <TrackList tracks={favorites} activeTrackId={getTrackKey(currentTrack)} onPlay={(index) => playTrackFromCollection(favorites, index)} onToggleFavorite={toggleFavorite} favoriteTrackKeys={favoriteTrackKeys} showFavoriteAction emptyMessage="Добавляй треки в избранное прямо из плеера." />
+      </ScreenSection>
+      <ScreenSection title="Твои плейлисты" actionLabel="Открыть" onAction={() => setActiveTab("playlists")}>
+        <EntityList items={mixCards} onSelect={() => setActiveTab("playlists")} emptyMessage="Плейлистов пока нет." />
+      </ScreenSection>
+    </section>
+  );
 
-        <TrackList
-          tracks={trackFeed}
-          activeTrackId={getTrackKey(currentTrack)}
-          onPlay={(index) => playTrackFromCollection(trackFeed, index)}
-          onToggleFavorite={toggleFavorite}
-          favoriteTrackKeys={favoriteTrackKeys}
-          emptyMessage="Сделайте поиск, чтобы увидеть список треков."
-        />
-      </section>
-    );
-  }
-
-  function renderMineTab() {
-    return (
-      <section className="phone-shell">
-        <MiniHeader
-          title="Моя музыка"
-          subtitle="Мои"
-          actionLabel="Плейлисты"
-          onAction={() => setActiveTab("playlists")}
-        />
-
-        <section className="quick-grid quick-grid--three">
-          <div className="summary-card summary-card--static">
-            <span className="summary-card__label">Недавние</span>
-            <strong>{recentTracks.length}</strong>
-            <p>Последние прослушивания</p>
-          </div>
-
-          <div className="summary-card summary-card--static">
-            <span className="summary-card__label">Избранные</span>
-            <strong>{favorites.length}</strong>
-            <p>Быстрый доступ к любимым трекам</p>
-          </div>
-
-          <div className="summary-card summary-card--static">
-            <span className="summary-card__label">Плейлисты</span>
-            <strong>{playlists.length}</strong>
-            <p>Личные подборки пользователя</p>
-          </div>
-        </section>
-
-        <Section title="Последние прослушанные">
-          <TrackList
-            tracks={recentTracks}
-            activeTrackId={getTrackKey(currentTrack)}
-            onPlay={(index) => playTrackFromCollection(recentTracks, index)}
-            onToggleFavorite={toggleFavorite}
-            favoriteTrackKeys={favoriteTrackKeys}
-            emptyMessage="Пока нет истории прослушивания."
-          />
-        </Section>
-
-        <Section title="Избранные треки">
-          <TrackList
-            tracks={favorites}
-            activeTrackId={getTrackKey(currentTrack)}
-            onPlay={(index) => playTrackFromCollection(favorites, index)}
-            onToggleFavorite={toggleFavorite}
-            favoriteTrackKeys={favoriteTrackKeys}
-            emptyMessage="Добавьте треки в избранное сердцем на странице треков."
-          />
-        </Section>
-
-        <Section title="Мои плейлисты" actionLabel="Создать" onAction={() => setActiveTab("playlists")}>
-          <div className="playlist-chip-grid">
-            {playlists.length > 0 ? (
-              playlists.map((playlist) => (
-                <button
-                  key={playlist.id}
-                  className="playlist-chip"
-                  type="button"
-                  onClick={() => setActiveTab("playlists")}
-                >
-                  <strong>{playlist.name}</strong>
-                  <span>{playlist.tracks.length} треков</span>
-                </button>
-              ))
-            ) : (
-              <div className="empty-state">
-                <p>Плейлистов пока нет. Создайте первый на соседней вкладке.</p>
-              </div>
-            )}
-          </div>
-        </Section>
-      </section>
-    );
-  }
-
-  function renderPlaylistsTab() {
-    return (
-      <section className="phone-shell">
-        <MiniHeader title="Конструктор плейлистов" subtitle="Плейлисты" />
-
-        <form className="builder-card" onSubmit={handleCreatePlaylist}>
-          <label className="search-panel__label" htmlFor="playlist-name">
-            Новый плейлист
-          </label>
-          <div className="search-panel__controls">
-            <input
-              id="playlist-name"
-              className="search-panel__input"
-              type="text"
-              value={newPlaylistName}
-              onChange={(event) => setNewPlaylistName(event.target.value)}
-              placeholder="Например, Ночной вайб"
-            />
-            <button className="search-panel__button" type="submit">
-              Создать
-            </button>
-          </div>
+  const renderPlaylistsTab = () => (
+    <section className="stack-screen">
+      <header className="stack-screen__header">
+        <button type="button" onClick={() => setActiveTab("home")}>Назад</button>
+        <h1>Плейлисты</h1>
+        <span>{playlists.length}</span>
+      </header>
+      <form className="playlist-builder" onSubmit={handleCreatePlaylist}>
+        <input className="search-inline__input" type="text" value={newPlaylistName} onChange={(event) => setNewPlaylistName(event.target.value)} placeholder="Название нового плейлиста" />
+        <button className="search-inline__submit" type="submit">Создать</button>
+      </form>
+      {playlists.length > 0 ? (
+        <form className="playlist-builder playlist-builder--secondary" onSubmit={handleQuickAddTrack}>
+          <select className="search-inline__input" value={selectedPlaylistId} onChange={(event) => setSelectedPlaylistId(event.target.value)}>
+            {playlists.map((playlist) => <option key={playlist.id} value={playlist.id}>{playlist.name}</option>)}
+          </select>
+          <select className="search-inline__input" value={selectedTrackKey} onChange={(event) => setSelectedTrackKey(event.target.value)}>
+            {allKnownTracks.map((track) => <option key={getTrackKey(track)} value={getTrackKey(track)}>{track.title} - {track.artist}</option>)}
+          </select>
+          <button className="search-inline__submit" type="submit">Добавить</button>
         </form>
-
-        {playlists.length > 0 ? (
-          <form className="builder-card builder-card--compact" onSubmit={handleQuickAddTrack}>
-            <h2>Быстро добавить трек</h2>
-            <div className="builder-card__grid">
-              <select
-                className="search-panel__input"
-                value={selectedPlaylistId}
-                onChange={(event) => setSelectedPlaylistId(event.target.value)}
-              >
-                {playlists.map((playlist) => (
-                  <option key={playlist.id} value={playlist.id}>
-                    {playlist.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="search-panel__input"
-                value={selectedTrackKey}
-                onChange={(event) => setSelectedTrackKey(event.target.value)}
-              >
-                {allKnownTracks.map((track) => (
-                  <option key={getTrackKey(track)} value={getTrackKey(track)}>
-                    {track.title} - {track.artist}
-                  </option>
-                ))}
-              </select>
+      ) : null}
+      <div className="playlist-stack">
+        {playlists.length > 0 ? playlists.map((playlist) => (
+          <article key={playlist.id} className="playlist-card">
+            <div className="playlist-card__header">
+              <div><h2>{playlist.name}</h2><p>{playlist.tracks.length} треков</p></div>
+              <div className="playlist-card__actions">
+                {currentTrack ? <button type="button" onClick={() => addTrackToPlaylist(playlist.id, currentTrack)}>Текущий</button> : null}
+                <button type="button" onClick={() => removePlaylist(playlist.id)}>Удалить</button>
+              </div>
             </div>
-
-            <button className="search-panel__button" type="submit">
-              Добавить в плейлист
-            </button>
-          </form>
-        ) : null}
-
-        <div className="playlist-board">
-          {playlists.length > 0 ? (
-            playlists.map((playlist) => (
-              <article key={playlist.id} className="playlist-panel">
-                <div className="playlist-panel__header">
-                  <div>
-                    <h2>{playlist.name}</h2>
-                    <p>{playlist.tracks.length} треков</p>
-                  </div>
-
-                  <div className="playlist-panel__actions">
-                    {currentTrack ? (
-                      <button
-                        type="button"
-                        onClick={() => addTrackToPlaylist(playlist.id, currentTrack)}
-                      >
-                        Текущий трек
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => removePlaylist(playlist.id)}>
-                      Удалить
+            {playlist.tracks.length > 0 ? (
+              <div className="playlist-card__tracks">
+                {playlist.tracks.map((track, index) => (
+                  <div key={getTrackKey(track)} className="playlist-track">
+                    <button className="playlist-track__main" type="button" onClick={() => playTrackFromCollection(playlist.tracks, index)}>
+                      <div className="library-row__cover" aria-hidden="true">{track.cover ? <img src={track.cover} alt="" /> : <span>♪</span>}</div>
+                      <div className="library-row__copy"><h3>{track.title}</h3><p>{track.artist}</p></div>
                     </button>
+                    <div className="playlist-track__actions">
+                      <button type="button" onClick={() => toggleFavorite(track)}>{favoriteTrackKeys.has(getTrackKey(track)) ? "♥" : "♡"}</button>
+                      <button type="button" onClick={() => removeTrackFromPlaylist(playlist.id, getTrackKey(track))}>Убрать</button>
+                    </div>
                   </div>
-                </div>
-
-                {playlist.tracks.length > 0 ? (
-                  <div className="playlist-track-list">
-                    {playlist.tracks.map((track, index) => (
-                      <div key={getTrackKey(track)} className="playlist-track-row">
-                        <button
-                          className="playlist-track-row__main"
-                          type="button"
-                          onClick={() => playTrackFromCollection(playlist.tracks, index)}
-                        >
-                          <div className="track-card__cover" aria-hidden="true">
-                            {track.cover ? <img src={track.cover} alt="" /> : <span>♪</span>}
-                          </div>
-                          <div>
-                            <strong>{track.title}</strong>
-                            <p>{track.artist}</p>
-                          </div>
-                        </button>
-
-                        <div className="playlist-track-row__actions">
-                          <button type="button" onClick={() => toggleFavorite(track)}>
-                            {favoriteTrackKeys.has(getTrackKey(track)) ? "♥" : "♡"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              removeTrackFromPlaylist(playlist.id, getTrackKey(track))
-                            }
-                          >
-                            Убрать
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state">
-                    <p>Плейлист пока пуст. Добавьте текущий или любой известный трек.</p>
-                  </div>
-                )}
-              </article>
-            ))
-          ) : (
-            <div className="empty-state">
-              <p>Создайте первый плейлист, чтобы собирать музыку под себя.</p>
-            </div>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  function renderActiveTab() {
-    if (activeTab === "tracks") {
-      return renderTracksTab();
-    }
-
-    if (activeTab === "mine") {
-      return renderMineTab();
-    }
-
-    if (activeTab === "playlists") {
-      return renderPlaylistsTab();
-    }
-
-    return renderHomeTab();
-  }
+                ))}
+              </div>
+            ) : <div className="empty-state empty-state--flat"><p>Плейлист пуст. Добавь в него первый трек.</p></div>}
+          </article>
+        )) : <div className="empty-state empty-state--flat"><p>Создай первый плейлист, чтобы собирать музыку для себя.</p></div>}
+      </div>
+    </section>
+  );
 
   return (
-    <main className="app-shell app-shell--client">
+    <main className="app-shell app-shell--client redesign-shell">
       <audio ref={audioRef} preload="none" />
-
-      {renderActiveTab()}
-
-      <Player
-        track={currentTrack}
-        isPlaying={isPlaying}
-        currentTime={currentTime}
-        duration={duration}
-        onTogglePlay={handleTogglePlay}
-        onSeek={handleSeek}
-        onPrev={handlePrev}
-        onNext={handleNext}
-        isFavorite={favoriteTrackKeys.has(getTrackKey(currentTrack))}
-        onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack)}
-      />
-
+      {renderDrawer()}
+      {activeTab === "mine" && renderMineTab()}
+      {activeTab === "playlists" && renderPlaylistsTab()}
+      {activeTab === "home" && renderHomeTab()}
+      <Player track={currentTrack} isPlaying={isPlaying} currentTime={currentTime} duration={duration} onTogglePlay={handleTogglePlay} onPrev={handlePrev} onNext={handleNext} />
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
     </main>
   );
 }
-

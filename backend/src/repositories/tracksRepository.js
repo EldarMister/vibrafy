@@ -244,12 +244,22 @@ export async function createManualTrack(track) {
         is_active,
         is_manual,
         source_name,
-        catalog_artist_name
+        catalog_artist_name,
+        genre_name,
+        source_section
       )
-      VALUES ($1, $2, $3, $4, TRUE, TRUE, 'manual', $2)
+      VALUES ($1, $2, $3, $4, $5, TRUE, 'manual', $6, $7, 'manual')
       RETURNING *
     `,
-    [track.title, track.artist, track.audio_url, track.cover || null],
+    [
+      track.title,
+      track.artist,
+      track.audio_url,
+      track.cover || null,
+      track.is_active ?? true,
+      track.catalog_artist_name || track.artist,
+      track.genre_name || null,
+    ],
   );
 
   return mapTrack(result.rows[0]);
@@ -265,7 +275,7 @@ export async function updateTrack(id, track) {
         audio_url = $4,
         cover = $5,
         is_active = $6,
-        catalog_artist_name = COALESCE(NULLIF($7, ''), catalog_artist_name, $3),
+        catalog_artist_name = COALESCE(NULLIF($7, ''), $3),
         genre_name = NULLIF($8, ''),
         updated_at = NOW()
       WHERE id = $1
