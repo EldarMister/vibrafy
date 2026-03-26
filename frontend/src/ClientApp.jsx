@@ -18,7 +18,7 @@ const MAX_RECENT_TRACKS = 20;
 const INITIAL_CATALOG_PAGE_SIZE = 180;
 const BACKGROUND_CATALOG_PAGE_SIZE = 1000;
 const PUBLIC_CATALOG_MAX_TRACKS = 10000;
-const REMOTE_CATALOG_CACHE_MIN_TRACKS = 500;
+const REMOTE_CATALOG_CACHE_MIN_TRACKS = 100;
 const SEARCH_DEBOUNCE_MS = 280;
 const SLEEP_TIMER_OPTIONS = [15, 30, 45, 60];
 const HAS_REMOTE_API = Boolean(import.meta.env.VITE_API_BASE_URL);
@@ -575,57 +575,64 @@ export function ClientApp() {
   }, [telegram]);
 
   useEffect(() => {
-    if (!HAS_REMOTE_API || catalogLoading || catalogLoadedRef.current) {
+    if (!HAS_REMOTE_API || catalogLoadedRef.current) {
       return undefined;
     }
 
+    catalogLoadedRef.current = true;
+
     let isCancelled = false;
+    const hadCachedTracks = getInitialCatalogTracks().length > 0;
 
     async function loadCatalog() {
-      catalogLoadedRef.current = true;
-      setCatalogLoading(tracks.length === 0);
+      setCatalogLoading(!hadCachedTracks);
       setError("");
 
       try {
         const initialCatalog = await loadCatalogTracksFromApi(INITIAL_CATALOG_PAGE_SIZE, 0);
 
-        if (!isCancelled) {
-          const initialItems = initialCatalog.items.slice(0, PUBLIC_CATALOG_MAX_TRACKS);
-          setTracks(initialItems);
-          setCatalogTotal(initialCatalog.total || initialItems.length);
-          setCatalogLoading(false);
+        if (isCancelled) {
+          return;
+        }
 
-          let collectedTracks = initialItems;
-          let offset = initialItems.length;
-          const total = initialCatalog.total || initialItems.length;
+        const initialItems = initialCatalog.items.slice(0, PUBLIC_CATALOG_MAX_TRACKS);
+        setTracks(initialItems);
+        setCatalogTotal(initialCatalog.total || initialItems.length);
+        setCatalogLoading(false);
 
-          while (!isCancelled && offset < total && collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS) {
-            const nextCatalog = await loadCatalogTracksFromApi(BACKGROUND_CATALOG_PAGE_SIZE, offset);
+        let collectedTracks = initialItems;
+        let offset = initialItems.length;
+        const total = initialCatalog.total || initialItems.length;
 
-            if (nextCatalog.items.length === 0) {
-              break;
-            }
+        while (!isCancelled && offset < total && collectedTracks.length < PUBLIC_CATALOG_MAX_TRACKS) {
+          const nextCatalog = await loadCatalogTracksFromApi(BACKGROUND_CATALOG_PAGE_SIZE, offset);
 
-            collectedTracks = uniqueTracks([...collectedTracks, ...nextCatalog.items]).slice(
-              0,
-              PUBLIC_CATALOG_MAX_TRACKS,
-            );
-            offset += nextCatalog.items.length;
-            setTracks(collectedTracks);
+          if (nextCatalog.items.length === 0) {
+            break;
           }
+
+          collectedTracks = uniqueTracks([...collectedTracks, ...nextCatalog.items]).slice(
+            0,
+            PUBLIC_CATALOG_MAX_TRACKS,
+          );
+          offset += nextCatalog.items.length;
+          setTracks(collectedTracks);
         }
       } catch (requestError) {
-        if (!isCancelled) {
-          if (tracks.length === 0) {
-            setTracks([]);
-            setCatalogTotal(0);
-          }
-          setError(
+        if (isCancelled) {
+          return;
+        }
+
+        if (!hadCachedTracks) {
+          setTracks([]);
+          setCatalogTotal(0);
+        }
+
+        setError(
             requestError instanceof Error
               ? `Не удалось загрузить каталог: ${requestError.message}`
               : "Не удалось загрузить каталог.",
           );
-        }
       } finally {
         if (!isCancelled) {
           setCatalogLoading(false);
@@ -638,7 +645,7 @@ export function ClientApp() {
     return () => {
       isCancelled = true;
     };
-  }, [catalogLoading, tracks.length]);
+  }, []);
 
   useEffect(() => {
     if (currentTrack || rankedCatalogTracks.length === 0) {
