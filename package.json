@@ -1,0 +1,16 @@
+{
+  "name": "telegram-music-mini-app",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "build:frontend": "npm run build --workspace frontend",
+    "build": "npm run build --workspace frontend",
+    "start:frontend": "npm run start --workspace frontend",
+    "start": "npm run start --workspace backend"
+  }
+}
