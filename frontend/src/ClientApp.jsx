@@ -221,6 +221,18 @@ function rankCatalogTracks(tracks, tasteProfile, favoriteTrackKeys, recentTrackK
   });
 }
 
+function shuffleTracks(collection, currentTrackKey) {
+  const currentTrack = collection.find((track) => getTrackKey(track) === currentTrackKey) || null;
+  const rest = collection.filter((track) => getTrackKey(track) !== currentTrackKey);
+
+  for (let index = rest.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [rest[index], rest[randomIndex]] = [rest[randomIndex], rest[index]];
+  }
+
+  return currentTrack ? [currentTrack, ...rest] : rest;
+}
+
 function scoreField(value, normalizedQuery) {
   const normalizedValue = String(value || "").toLowerCase();
 
@@ -383,8 +395,12 @@ export function ClientApp() {
   const [playlists, setPlaylists] = useState(() =>
     normalizePlaylists(readStoredJson(STORAGE_KEYS.playlists, [])),
   );
+  const [queueSource, setQueueSource] = useState([]);
   const [queue, setQueue] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
+  const [isShuffled, setIsShuffled] = useState(false);
+  const [repeatMode, setRepeatMode] = useState("off");
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [error, setError] = useState("");
@@ -447,6 +463,34 @@ export function ClientApp() {
     () => (query.trim() ? searchResults : rankedCatalogTracks),
     [query, searchResults, rankedCatalogTracks],
   );
+
+  function buildPlaybackState(collection, currentTrackKey, shuffled = isShuffled) {
+    const normalizedCollection = uniqueTracks(collection);
+
+    if (normalizedCollection.length === 0) {
+      return { currentKey: "", nextIndex: -1, nextQueue: [], normalizedCollection };
+    }
+
+    const fallbackKey = getTrackKey(normalizedCollection[0]);
+    const resolvedCurrentKey =
+      normalizedCollection.some((track) => getTrackKey(track) === currentTrackKey)
+        ? currentTrackKey
+        : fallbackKey;
+    const nextQueue = shuffled
+      ? shuffleTracks(normalizedCollection, resolvedCurrentKey)
+      : normalizedCollection;
+    const nextIndex = Math.max(
+      nextQueue.findIndex((track) => getTrackKey(track) === resolvedCurrentKey),
+      0,
+    );
+
+    return {
+      currentKey: resolvedCurrentKey,
+      nextIndex,
+      nextQueue,
+      normalizedCollection,
+    };
+  }
 
   useEffect(() => writeStoredJson(STORAGE_KEYS.tracks, tracks), [tracks]);
   useEffect(() => writeStoredJson(STORAGE_KEYS.favorites, favorites), [favorites]);
@@ -564,9 +608,25 @@ export function ClientApp() {
       return;
     }
 
-    setQueue(rankedCatalogTracks);
-    setCurrentIndex(0);
+    const { nextIndex, nextQueue, normalizedCollection } = buildPlaybackState(
+      rankedCatalogTracks,
+      getTrackKey(rankedCatalogTracks[0]),
+    );
+
+    setQueueSource(normalizedCollection);
+    setQueue(nextQueue);
+    setCurrentIndex(nextIndex);
   }, [currentTrack, rankedCatalogTracks]);
+
+  useEffect(() => {
+    if (queueSource.length === 0) {
+      return;
+    }
+
+    const { nextIndex, nextQueue } = buildPlaybackState(queueSource, getTrackKey(currentTrack));
+    setQueue(nextQueue);
+    setCurrentIndex(nextIndex);
+  }, [isShuffled]);
 
   useEffect(() => {
     const normalizedQuery = query.trim();
@@ -649,9 +709,23 @@ export function ClientApp() {
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
+      if (repeatMode === "one") {
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+          setIsPlaying(false);
+        });
+        return;
+      }
+
       if (currentIndex < queue.length - 1) {
         playbackIntentRef.current = true;
         setCurrentIndex((value) => value + 1);
+        return;
+      }
+
+      if (repeatMode === "all" && queue.length > 0) {
+        playbackIntentRef.current = true;
+        setCurrentIndex(0);
         return;
       }
 
@@ -671,7 +745,7 @@ export function ClientApp() {
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [currentIndex, queue.length]);
+  }, [currentIndex, queue.length, repeatMode]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -739,10 +813,20 @@ export function ClientApp() {
     }
 
     const normalizedCollection = uniqueTracks(collection);
+    const targetTrack = normalizedCollection[index];
+    const { nextIndex, nextQueue } = buildPlaybackState(
+      normalizedCollection,
+      getTrackKey(targetTrack),
+    );
+
     playbackIntentRef.current = true;
-    setQueue(normalizedCollection);
-    setCurrentIndex(index);
-    rememberTrack(normalizedCollection[index]);
+    setQueueSource(normalizedCollection);
+    setQueue(nextQueue);
+    setCurrentIndex(nextIndex);
+    setSearchOpen(false);
+    setSleepPanelOpen(false);
+    setIsFullPlayerOpen(true);
+    rememberTrack(targetTrack);
   }
 
   function handleTogglePlay() {
@@ -767,13 +851,70 @@ export function ClientApp() {
   }
 
   function handlePrev() {
+    const audio = audioRef.current;
+
+    if (audio && currentTime > 3) {
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      return;
+    }
+
     playbackIntentRef.current = true;
-    setCurrentIndex((value) => Math.max(value - 1, 0));
+    setCurrentIndex((value) => {
+      if (value > 0) {
+        return value - 1;
+      }
+
+      if (repeatMode === "all" && queue.length > 0) {
+        return queue.length - 1;
+      }
+
+      return 0;
+    });
   }
 
   function handleNext() {
     playbackIntentRef.current = true;
-    setCurrentIndex((value) => Math.min(value + 1, queue.length - 1));
+    setCurrentIndex((value) => {
+      if (value < queue.length - 1) {
+        return value + 1;
+      }
+
+      if (repeatMode === "all" && queue.length > 0) {
+        return 0;
+      }
+
+      return Math.max(queue.length - 1, 0);
+    });
+  }
+
+  function handleSeek(nextTime) {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  }
+
+  function handleToggleShuffle() {
+    setIsShuffled((value) => !value);
+  }
+
+  function handleToggleRepeat() {
+    setRepeatMode((value) => {
+      if (value === "off") {
+        return "all";
+      }
+
+      if (value === "all") {
+        return "one";
+      }
+
+      return "off";
+    });
   }
 
   function toggleFavorite(track) {
@@ -1181,9 +1322,21 @@ export function ClientApp() {
         isPlaying={isPlaying}
         currentTime={currentTime}
         duration={duration}
+        isExpanded={isFullPlayerOpen}
+        isFavorite={favoriteTrackKeys.has(getTrackKey(currentTrack))}
+        isShuffled={isShuffled}
+        onClose={() => setIsFullPlayerOpen(false)}
         onTogglePlay={handleTogglePlay}
         onPrev={handlePrev}
         onNext={handleNext}
+        onOpen={() => setIsFullPlayerOpen(true)}
+        onSeek={handleSeek}
+        onToggleFavorite={() => toggleFavorite(currentTrack)}
+        onToggleShuffle={handleToggleShuffle}
+        onToggleRepeat={handleToggleRepeat}
+        queueLength={queue.length}
+        queuePosition={currentIndex + 1}
+        repeatMode={repeatMode}
       />
 
       <BottomNav activeTab={activeTab} onChange={setActiveTab} />
