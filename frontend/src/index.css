@@ -1380,6 +1380,19 @@ button {
   gap: 12px;
 }
 
+.player-screen__title-group {
+  display: grid;
+  gap: 2px;
+}
+
+.player-screen__title-group p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
 .player-screen__header h1,
 .stack-screen__header h1 {
   margin: 0;
@@ -1425,6 +1438,82 @@ button {
   height: 22px;
 }
 
+.sleep-control {
+  position: relative;
+}
+
+.sleep-control__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  cursor: pointer;
+}
+
+.sleep-control__button--active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sleep-control__button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sleep-control__button span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sleep-control__panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 15;
+  min-width: 220px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(22, 22, 22, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.42);
+}
+
+.sleep-control__panel strong {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.sleep-control__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sleep-control__option,
+.sleep-control__clear {
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.sleep-control__option {
+  min-height: 40px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.sleep-control__clear {
+  width: 100%;
+  min-height: 40px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
 .search-inline {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -1463,6 +1552,45 @@ button {
 .search-inline__close {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
+}
+
+.search-inline__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+}
+
+.catalog-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.catalog-toolbar__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.catalog-toolbar__copy strong {
+  font-size: 15px;
+}
+
+.catalog-toolbar__copy span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.catalog-toolbar__reset {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
 }
 
 .library-toolbar {
@@ -1847,6 +1975,11 @@ button {
   .player-screen,
   .stack-screen {
     border-radius: 28px;
+  }
+
+  .catalog-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .library-toolbar {

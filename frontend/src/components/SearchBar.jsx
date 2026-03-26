@@ -1,30 +1,43 @@
 export function SearchBar({
   value,
   onChange,
-  onSubmit,
   isLoading,
   onClose,
+  resultCount = 0,
 }) {
+  const hasValue = value.trim().length > 0;
+
   return (
-    <form className="search-inline" onSubmit={onSubmit}>
+    <div className="search-inline" role="search">
       <input
         className="search-inline__input"
         type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Найти трек или исполнителя"
+        placeholder="Найти трек, исполнителя или жанр"
         autoComplete="off"
+        autoFocus
       />
 
-      <button className="search-inline__submit" type="submit" disabled={isLoading}>
-        {isLoading ? "..." : "Найти"}
-      </button>
+      {hasValue ? (
+        <button className="search-inline__close" type="button" onClick={() => onChange("")}>
+          Очистить
+        </button>
+      ) : null}
 
       {onClose ? (
         <button className="search-inline__close" type="button" onClick={onClose}>
-          Закрыть
+          Скрыть
         </button>
       ) : null}
-    </form>
+
+      <p className="search-inline__hint">
+        {hasValue
+          ? isLoading
+            ? "Ищу без Enter..."
+            : `Найдено ${resultCount} треков`
+          : "Поиск работает сразу, без Enter."}
+      </p>
+    </div>
   );
 }
