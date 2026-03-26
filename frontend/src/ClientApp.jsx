@@ -1003,22 +1003,11 @@ export function ClientApp() {
     setMenuOpen(false);
   }
 
-  const homeHint = query.trim()
-    ? isSearchLoading
-      ? "Ищу по каталогу и источнику в реальном времени..."
-      : `Найдено ${homeTracks.length} треков`
-    : catalogTotal > 0 || rankedCatalogTracks.length > 0
-      ? tasteProfile.size > 0
-        ? `Сначала рекомендации по вкусу, ниже весь каталог • ${catalogTotal || rankedCatalogTracks.length} треков`
-        : `Сначала популярные треки, ниже весь каталог • ${catalogTotal || rankedCatalogTracks.length} треков`
-      : "Каталог пока пуст.";
-
   const renderHomeTab = () => (
     <section className="player-screen">
       <header className="player-screen__header">
         <div className="player-screen__leading">
           <div className="player-screen__title-group">
-            <p>Главная</p>
             <h1>Музыка</h1>
           </div>
         </div>
@@ -1091,8 +1080,7 @@ export function ClientApp() {
 
       <div className="catalog-toolbar">
         <div className="catalog-toolbar__copy">
-          <strong>{query.trim() ? "Умный поиск" : tasteProfile.size > 0 ? "Для тебя" : "Популярное"}</strong>
-          <span>{homeHint}</span>
+          <strong>Главная</strong>
         </div>
 
         {query.trim() ? (
