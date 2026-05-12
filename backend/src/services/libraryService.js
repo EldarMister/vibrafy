@@ -6,7 +6,6 @@ import {
   searchTracksInDb,
   softDeleteTrack,
   updateTrack,
-  upsertParsedTracks,
 } from "../repositories/tracksRepository.js";
 import {
   appendParserJobEvent,
@@ -24,7 +23,8 @@ import {
   discoverGenres,
   fetchCatalogPage,
   fetchTracksFromSource,
-} from "./sefonService.js";
+} from "./sefonParser.service.js";
+import { importParsedTracks as importParsedTracksToStorage } from "./trackService.js";
 
 const PAGE_LIMITS = {
   artist: 60,
@@ -49,11 +49,19 @@ function uniqueParsedTracks(tracks) {
   const map = new Map();
 
   for (const track of tracks) {
-    if (!track?.source_track_id || map.has(track.source_track_id)) {
+    const key =
+      track?.source_track_id ||
+      track?.source_id ||
+      track?.track_page_url ||
+      track?.source_page_url ||
+      track?.audio_url ||
+      `${track?.title || ""}-${track?.artist || ""}`;
+
+    if (!key || map.has(key)) {
       continue;
     }
 
-    map.set(track.source_track_id, track);
+    map.set(key, track);
   }
 
   return [...map.values()];
@@ -119,7 +127,7 @@ async function shouldStopCatalogRun() {
 async function importParsedTracks(parsedTracks) {
   return importTracksWithQuota({
     parsedTracks: uniqueParsedTracks(parsedTracks),
-    importTracks: upsertParsedTracks,
+    importTracks: importParsedTracksToStorage,
   });
 }
 

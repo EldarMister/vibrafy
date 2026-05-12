@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "./components/BottomNav.jsx";
 import { Player } from "./components/Player.jsx";
-import { apiRequest } from "./lib/api.js";
+import { apiRequest, resolveApiUrl } from "./lib/api.js";
 import { useTelegram } from "./hooks/useTelegram.js";
 
 const STORAGE_KEYS = {
@@ -224,8 +224,8 @@ function normalizeTrack(track) {
     id: getTrackKey(track),
     title: track.title || "Без названия",
     artist: track.artist || track.catalog_artist_name || "Неизвестный артист",
-    audio_url: track.audio_url || track.audioUrl || "",
-    cover: track.cover || track.catalog_artist_cover || getFallbackCover(track),
+    audio_url: resolveApiUrl(track.audio_url || track.audioUrl || ""),
+    cover: resolveApiUrl(track.cover || track.coverUrl || track.catalog_artist_cover || getFallbackCover(track)),
     duration: Number(track.duration || track.duration_seconds || 0),
     mood: Array.isArray(track.mood) ? track.mood : [],
   };
@@ -488,7 +488,7 @@ function rankTracksBySearch(tracks, query, tasteProfile, favoriteTrackKeys, rece
 }
 
 async function loadCatalogTracksFromApi(limit, offset = 0) {
-  const response = await apiRequest(`/catalog?limit=${limit}&offset=${offset}`);
+  const response = await apiRequest(`/api/tracks?limit=${limit}&offset=${offset}`);
   const items = uniqueTracks(response.items || []);
   const total = Number(response.total || items.length);
 
@@ -1141,6 +1141,10 @@ export function ClientApp() {
     }
   }
 
+  function getUserKey() {
+    return String(telegram?.initDataUnsafe?.user?.id || "anonymous");
+  }
+
   function buildPlaybackState(collection, currentTrackKey, shuffled = isShuffled) {
     const normalizedCollection = uniqueTracks(collection).filter((track) => track.audio_url);
 
@@ -1333,10 +1337,10 @@ export function ClientApp() {
       setIsSearchLoading(true);
 
       try {
-        const response = await apiRequest(`/search?q=${encodeURIComponent(query)}`);
+        const response = await apiRequest(`/api/tracks?search=${encodeURIComponent(query)}&limit=100`);
 
         if (!isCancelled && searchRequestRef.current === requestId) {
-          setRemoteSearchResults(uniqueTracks(response));
+          setRemoteSearchResults(uniqueTracks(response.items || response));
         }
       } catch {
         if (!isCancelled && searchRequestRef.current === requestId) {
@@ -1458,6 +1462,14 @@ export function ClientApp() {
   function rememberTrack(track) {
     if (track) {
       setRecentTracks((value) => upsertRecentTrack(value, track));
+
+      if (HAS_REMOTE_API && /^\d+$/.test(getTrackKey(track))) {
+        apiRequest(`/api/tracks/${getTrackKey(track)}/play`, {
+          method: "POST",
+          body: JSON.stringify({ userKey: getUserKey() }),
+          headers: { "Content-Type": "application/json" },
+        }).catch(() => {});
+      }
     }
   }
 
@@ -1609,6 +1621,15 @@ export function ClientApp() {
         ? value.filter((item) => getTrackKey(item) !== trackKey)
         : uniqueTracks([track, ...value]),
     );
+
+    if (HAS_REMOTE_API && /^\d+$/.test(trackKey)) {
+      apiRequest(`/api/tracks/${trackKey}/like`, {
+        method: "POST",
+        body: JSON.stringify({ userKey: getUserKey() }),
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => {});
+    }
+
     haptic("medium");
   }
 

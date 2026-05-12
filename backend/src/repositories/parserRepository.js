@@ -280,21 +280,22 @@ export async function getParserJobEvents(jobId, limit = 100) {
 
 export async function importTracksWithQuota({ parsedTracks, importTracks }) {
   const client = await pool.connect();
+  let allowedTracks = [];
+  let window;
+  let settings;
 
   try {
     await client.query("BEGIN");
     const settingsResult = await client.query(
       `SELECT * FROM parser_settings WHERE id = 1 FOR UPDATE`,
     );
-    const settings = settingsResult.rows[0];
-    const window = normalizeSettingsWindow(settings);
+    settings = settingsResult.rows[0];
+    window = normalizeSettingsWindow(settings);
     const remaining = Math.max(
       settings.hourly_limit - window.itemsProcessedThisHour,
       0,
     );
-    const allowedTracks = parsedTracks.slice(0, remaining);
-    const importedTracks =
-      allowedTracks.length > 0 ? await importTracks(client, allowedTracks) : [];
+    allowedTracks = parsedTracks.slice(0, remaining);
 
     await client.query(
       `
@@ -306,28 +307,30 @@ export async function importTracksWithQuota({ parsedTracks, importTracks }) {
         WHERE id = 1
       `,
       [
-        window.itemsProcessedThisHour + importedTracks.length,
+        window.itemsProcessedThisHour + allowedTracks.length,
         window.hourWindowStartedAt.toISOString(),
       ],
     );
 
     await client.query("COMMIT");
-
-    return {
-      importedTracks,
-      importedCount: importedTracks.length,
-      parsedCount: parsedTracks.length,
-      remainingHourlyQuota: Math.max(
-        settings.hourly_limit -
-          (window.itemsProcessedThisHour + importedTracks.length),
-        0,
-      ),
-      limitReached: importedTracks.length < parsedTracks.length,
-    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
   }
+
+  const importedTracks =
+    allowedTracks.length > 0 ? await importTracks(null, allowedTracks) : [];
+
+  return {
+    importedTracks,
+    importedCount: importedTracks.length,
+    parsedCount: parsedTracks.length,
+    remainingHourlyQuota: Math.max(
+      settings.hourly_limit - (window.itemsProcessedThisHour + allowedTracks.length),
+      0,
+    ),
+    limitReached: allowedTracks.length < parsedTracks.length,
+  };
 }

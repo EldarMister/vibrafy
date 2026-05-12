@@ -1,5 +1,7 @@
 import cors from "cors";
 import express from "express";
+import { createPlaylistsRouter } from "./api/playlists.controller.js";
+import { createTracksRouter } from "./api/tracks.controller.js";
 import {
   countTracks,
 } from "./repositories/tracksRepository.js";
@@ -22,6 +24,7 @@ import {
   softDeleteTrack,
   updateTrack,
 } from "./services/libraryService.js";
+import { getUploadsRoot } from "./services/storageService.js";
 
 function requireAdmin(req, res, next) {
   const adminKey = process.env.ADMIN_KEY || "changeme";
@@ -39,6 +42,9 @@ export function createApp() {
 
   app.use(cors());
   app.use(express.json());
+  app.use("/uploads", express.static(getUploadsRoot()));
+  app.use("/api/tracks", createTracksRouter());
+  app.use("/api/playlists", createPlaylistsRouter());
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
@@ -83,6 +89,7 @@ export function createApp() {
     const offset = Math.max(Number(req.query.offset || 0), 0);
     const tracks = await listTracks({
       isActive: true,
+      status: "active",
       limit,
       offset,
     });

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 async function handleResponse(response) {
   if (response.ok) {
@@ -22,6 +22,18 @@ export async function apiRequest(path, options = {}) {
   return handleResponse(response);
 }
 
+export function resolveApiUrl(url) {
+  if (!url || url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url || "";
+  }
+
+  if (!url.startsWith("/")) {
+    return url;
+  }
+
+  return `${API_BASE_URL}${url}`;
+}
+
 export async function adminRequest(path, adminKey, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("x-admin-key", adminKey);
@@ -33,4 +45,3 @@ export async function adminRequest(path, adminKey, options = {}) {
 
   return handleResponse(response);
 }
-

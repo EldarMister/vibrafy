@@ -67,6 +67,20 @@ function normalizeBadgeText(value) {
   return normalizeText(value).replace(/^#\s*/, "");
 }
 
+function parseDurationText(value) {
+  const match = String(value || "").match(/(?:(\d{1,2}):)?(\d{1,2}):(\d{2})/);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
 function parseGenreFromAnchor($, anchor) {
   const href = $(anchor).attr("href");
   const slug = href ? parseGenreSlug(href) : null;
@@ -132,9 +146,13 @@ function parseTrackDetails(html) {
   const $ = cheerio.load(html);
   const genre = extractPrimaryGenre($, $(".box_right, .b_badges, body").first());
   const cover = extractArtistCover($, $("body"));
+  const duration =
+    parseDurationText($("body").text().match(/Продолжительность:\s*([0-9:]+)/i)?.[1]) ||
+    parseDurationText($("body").text().match(/Duration:\s*([0-9:]+)/i)?.[1]);
 
   return {
     cover,
+    duration,
     genre_name: genre?.name || null,
     genre_slug: genre?.slug || null,
     genre_link: genre?.url || null,
@@ -149,6 +167,9 @@ function parseTrack($, element, pageContext = {}) {
   const coverNode = container.find("img").first();
   const trackPageNode = container.find(".song_name a, a[href*='/mp3/']").first();
   const trackPageHref = trackPageNode.attr("href");
+  const duration = parseDurationText(
+    container.find(".duration, .time, .song_time, .mp3_time").first().text(),
+  );
   const artistLinks = container
     .find(".artist_name a")
     .toArray()
@@ -173,6 +194,7 @@ function parseTrack($, element, pageContext = {}) {
     title: normalizeText(container.find(".song_name").first().text()),
     artist: normalizeText(container.find(".artist_name").first().text()),
     audio_url: decodeProtectedUrl(encodedUrl, key),
+    duration,
     cover:
       pageContext.artist?.cover ||
       makeAbsoluteUrl(coverNode.attr("src") || coverNode.attr("data-src") || null),
@@ -275,6 +297,7 @@ async function enrichTracksForSearch(tracks) {
           ...track,
           cover: details.cover || track.cover || null,
           catalog_artist_cover: details.cover || track.catalog_artist_cover || null,
+          duration: details.duration || track.duration || null,
           genre_name: details.genre_name || track.genre_name || null,
           genre_slug: details.genre_slug || track.genre_slug || null,
           genre_link: details.genre_link || track.genre_link || null,
