@@ -22,6 +22,7 @@ async function ensureTracksTable() {
       ADD COLUMN IF NOT EXISTS catalog_artist_name TEXT,
       ADD COLUMN IF NOT EXISTS catalog_artist_slug TEXT,
       ADD COLUMN IF NOT EXISTS catalog_artist_link TEXT,
+      ADD COLUMN IF NOT EXISTS catalog_artist_cover TEXT,
       ADD COLUMN IF NOT EXISTS genre_name TEXT,
       ADD COLUMN IF NOT EXISTS genre_slug TEXT,
       ADD COLUMN IF NOT EXISTS genre_link TEXT,

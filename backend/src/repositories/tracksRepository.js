@@ -14,6 +14,7 @@ function mapTrack(row) {
     catalog_artist_name: row.catalog_artist_name,
     catalog_artist_slug: row.catalog_artist_slug,
     catalog_artist_link: row.catalog_artist_link,
+    catalog_artist_cover: row.catalog_artist_cover,
     genre_name: row.genre_name,
     genre_slug: row.genre_slug,
     genre_link: row.genre_link,
@@ -163,6 +164,7 @@ export async function listCatalogArtists({ search = "", limit = 100, offset = 0 
           REGEXP_REPLACE(LOWER(COALESCE(NULLIF(catalog_artist_name, ''), artist)), '[^a-z0-9а-яё]+', '-', 'g')
         ) AS slug,
         MAX(catalog_artist_link) AS link,
+        MAX(catalog_artist_cover) AS cover,
         COUNT(*)::INT AS total_tracks,
         COUNT(*) FILTER (WHERE is_active = TRUE)::INT AS active_tracks,
         MAX(updated_at) AS updated_at
@@ -245,10 +247,11 @@ export async function createManualTrack(track) {
         is_manual,
         source_name,
         catalog_artist_name,
+        catalog_artist_cover,
         genre_name,
         source_section
       )
-      VALUES ($1, $2, $3, $4, $5, TRUE, 'manual', $6, $7, 'manual')
+      VALUES ($1, $2, $3, $4, $5, TRUE, 'manual', $6, $7, $8, 'manual')
       RETURNING *
     `,
     [
@@ -258,6 +261,7 @@ export async function createManualTrack(track) {
       track.cover || null,
       track.is_active ?? true,
       track.catalog_artist_name || track.artist,
+      track.catalog_artist_cover || null,
       track.genre_name || null,
     ],
   );
@@ -276,7 +280,8 @@ export async function updateTrack(id, track) {
         cover = $5,
         is_active = $6,
         catalog_artist_name = COALESCE(NULLIF($7, ''), $3),
-        genre_name = NULLIF($8, ''),
+        catalog_artist_cover = NULLIF($8, ''),
+        genre_name = NULLIF($9, ''),
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -289,6 +294,7 @@ export async function updateTrack(id, track) {
       track.cover || null,
       track.is_active,
       track.catalog_artist_name || "",
+      track.catalog_artist_cover || "",
       track.genre_name || "",
     ],
   );
@@ -328,6 +334,7 @@ export async function upsertParsedTracks(client, tracks) {
           catalog_artist_name,
           catalog_artist_slug,
           catalog_artist_link,
+          catalog_artist_cover,
           genre_name,
           genre_slug,
           genre_link,
@@ -336,18 +343,19 @@ export async function upsertParsedTracks(client, tracks) {
         )
         VALUES (
           $1, $2, $3, $4, $5, 'sefon', TRUE, FALSE,
-          $6, $7, $8, $9, $10, $11, $12, $13
+          $6, $7, $8, $9, $10, $11, $12, $13, $14
         )
         ON CONFLICT (source_track_id) DO UPDATE
         SET
           title = EXCLUDED.title,
           artist = EXCLUDED.artist,
           audio_url = EXCLUDED.audio_url,
-          cover = EXCLUDED.cover,
+          cover = COALESCE(EXCLUDED.cover, tracks.cover),
           is_active = TRUE,
           catalog_artist_name = COALESCE(EXCLUDED.catalog_artist_name, tracks.catalog_artist_name),
           catalog_artist_slug = COALESCE(EXCLUDED.catalog_artist_slug, tracks.catalog_artist_slug),
           catalog_artist_link = COALESCE(EXCLUDED.catalog_artist_link, tracks.catalog_artist_link),
+          catalog_artist_cover = COALESCE(EXCLUDED.catalog_artist_cover, tracks.catalog_artist_cover),
           genre_name = COALESCE(EXCLUDED.genre_name, tracks.genre_name),
           genre_slug = COALESCE(EXCLUDED.genre_slug, tracks.genre_slug),
           genre_link = COALESCE(EXCLUDED.genre_link, tracks.genre_link),
@@ -365,6 +373,7 @@ export async function upsertParsedTracks(client, tracks) {
         track.catalog_artist_name || null,
         track.catalog_artist_slug || null,
         track.catalog_artist_link || null,
+        track.catalog_artist_cover || null,
         track.genre_name || null,
         track.genre_slug || null,
         track.genre_link || null,
